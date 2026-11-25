@@ -1,0 +1,72 @@
+diff --git a/lib/Target/CBackend/CBackend.cpp b/lib/Target/CBackend/CBackend.cpp
+index 8d57096..70b6e3c 100644
+--- a/lib/Target/CBackend/CBackend.cpp
++++ b/lib/Target/CBackend/CBackend.cpp
+@@ -2594,6 +2594,8 @@ void CWriter::generateHeader(Module &M) {
+       case Intrinsic::ssub_sat:
+       case Intrinsic::sshl_sat:
+       case Intrinsic::ushl_sat:
++      case Intrinsic::fshl:
++      case Intrinsic::fshr:
+       case Intrinsic::bswap:
+       case Intrinsic::ceil:
+       case Intrinsic::ctlz:
+@@ -2714,8 +2716,11 @@ void CWriter::generateHeader(Module &M) {
+ 
+       Type *ElTy = I->getValueType();
+       unsigned Alignment = I->getAliaseeObject()->getAlignment();
++      // Function-type aliases (Itanium C1/D1 -> C2/D2 ctor/dtor aliases) are
++      // unsized: asking DataLayout for their alignment crashes.
+       bool IsOveraligned =
+-          Alignment && Alignment > TD->getABITypeAlign(ElTy).value();
++          ElTy->isSized() && Alignment &&
++          Alignment > TD->getABITypeAlign(ElTy).value();
+       if (IsOveraligned) {
+         headerUseAligns();
+         Out << "__PREFIXALIGN__(" << Alignment << ") ";
+@@ -3628,6 +3633,8 @@ void CWriter::printModuleTypes(raw_ostream &Out) {
+   // Emit them now, before the function that uses them is emitted
+   for (auto &F : prototypesToGen) {
+     Out << '\n';
++    if (F->hasLocalLinkage())
++      Out << "static "; // must match the later definition's linkage
+     printFunctionProto(Out, F, GetValueName(F));
+     Out << ";\n";
+   }
+@@ -4730,6 +4737,18 @@ void CWriter::printIntrinsicDefinition(FunctionType *funT, unsigned Opcode,
+       Out << " : r;\n";
+       break;
+ 
++    case Intrinsic::fshl:
++    case Intrinsic::fshr: {
++      cwriter_assert(retT == elemT);
++      cwriter_assert(!isa<VectorType>(retT));
++      cwriter_assert(elemT->getIntegerBitWidth() <= 64);
++      Out << "  unsigned s = (unsigned)(c % " << elemT->getIntegerBitWidth() << ");\n";
++      if (Opcode == Intrinsic::fshl)
++        Out << "  r = s ? (a << s) | (b >> (" << elemT->getIntegerBitWidth() << " - s)) : a;\n";
++      else
++        Out << "  r = s ? (a << (" << elemT->getIntegerBitWidth() << " - s)) | (b >> s) : b;\n";
++      break;
++    }
+     case Intrinsic::bswap:
+       cwriter_assert(retT == elemT);
+       cwriter_assert(!isa<VectorType>(retT));
+@@ -4903,6 +4922,8 @@ bool CWriter::lowerIntrinsics(Function &F) {
+           case Intrinsic::ssub_sat:
+           case Intrinsic::ushl_sat:
+           case Intrinsic::sshl_sat:
++          case Intrinsic::fshl:
++          case Intrinsic::fshr:
+           case Intrinsic::bswap:
+           case Intrinsic::ceil:
+           case Intrinsic::ctlz:
+@@ -5245,6 +5266,8 @@ bool CWriter::visitBuiltinCall(CallInst &I, Intrinsic::ID ID) {
+   case Intrinsic::usub_with_overflow:
+   case Intrinsic::umul_with_overflow:
+   case Intrinsic::smul_with_overflow:
++  case Intrinsic::fshl:
++  case Intrinsic::fshr:
+   case Intrinsic::bswap:
+   case Intrinsic::ctlz:
+   case Intrinsic::ctpop:
