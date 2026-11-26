@@ -128,6 +128,12 @@ __atomic_fetch_sub_8(uvlong *p, uvlong v, int)
 	return o;
 }
 
+uchar
+__atomic_load_1(uchar *p, int)
+{
+	return *p;
+}
+
 uint
 __atomic_load_4(uint *p, int)
 {
@@ -192,4 +198,26 @@ __atomic_compare_exchange_8(uvlong *p, uvlong *expected, uvlong desired, int, in
 	}
 	*expected = *p;
 	return 0;
+}
+
+/*
+ * Guards for function-local statics with dynamic initialization.
+ * Single threaded: byte 0 of the guard is set once initialized.
+ */
+
+int
+__cxa_guard_acquire(uvlong *g)
+{
+	return *(uchar*)g == 0;
+}
+
+void
+__cxa_guard_release(uvlong *g)
+{
+	*(uchar*)g = 1;
+}
+
+void
+__cxa_guard_abort(uvlong*)
+{
 }

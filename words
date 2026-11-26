@@ -298,3 +298,30 @@ Next steps now (replace section 10's first two items):
   Plan 9 runtime needs: failing pthread_create, no-op pthread mutex/cond, the EH path for system_error.
   Risk not covered by the gate: network_server.cpp condition_variable (save streaming to joining clients).
 - Next: std::filesystem (9 files) and other OS dependencies of the dedicated build; then translate OpenTTD itself.
+
+=== 15. std::filesystem: NO PATCH (2026-11-26) ===
+- OpenTTD game code (not strgen/settingsgen) uses: path ops, exists, remove, file_size, rename, directory_iterator
+  (is_directory/is_regular_file), create_directories, weakly_canonical, last_write_time; all error_code overloads.
+- libc++ src/filesystem/*.cpp + system_error.cpp are now in common.sh libcxxsrcs (translated). cxxflags has
+  -D_LIBCPP_HAS_NO_INT128 (6c has no 128-bit ints; file_time_type rep becomes 64-bit). NOT for the native phase1 build
+  (it links the system libc++.so built with int128). OpenTTD's 3rdparty/fmt uses int128 behind FMT_USE_INT128: set 0
+  when translating OpenTTD.
+- libc_p9.c: stat/lstat/fstat (glibc x86-64 struct stat, 144 B), opendir/readdir/closedir (struct dirent, d_name @19),
+  mkdir, remove (errno from file state, not errstr), rename (wstat; same dir only, removes an existing target first,
+  else EXDEV), getcwd, realpath (cleanname, no symlinks), snprintf/vsnprintf (memory sink), v*printf take the x86-64
+  va_list (pointer to __va_list_tag; first word holds the Plan 9 va_list), strerror_r (GNU form, glibc texts),
+  clock_gettime (nsec). rt_p9.c / rt.c: __cxa_guard_acquire/release/abort, __atomic_load_1.
+- lower.py: RENAMED + snprintf vsnprintf stat lstat fstat opendir readdir closedir mkdir remove rename getcwd realpath;
+  renaming now skips string literals (bug: "exit.sav" -> "c_exit.sav"); preamble includes shim/stdarg.h (9front amd64
+  va macros).
+- mkinvoke.py (now: mkinvoke lowered.ll fixed.ll invoke.c): drops sret attributes (cbe makes sret functions return
+  structs by value; wrappers call with the IR signature -> mismatch; worked on x86-64 only by ABI luck); specializes
+  invokes of variadic functions per call site (__invoke_..._v_<types>), calling through a variadic prototype.
+- eh_rt: uncaught exception message names the type; terminate flushes stdout first. eh_sys.h: only eh_puts(s)/
+  eh_flush(); 9FRONT CPP QUIRK: a string-literal argument to a macro whose body contains a string literal is garbled
+  ("syntax error, last name: ..."); goken does not have this bug.
+- goken quirk: dirstat/remove failures leave errstr EMPTY -> seterrno treats empty as ENOENT; c_remove decides from
+  the file's state.
+- p9check.sh: shims rebuilt when eh/*.h, eh/plan9/*.h change.
+- Results: phase 0 9/9 (gcc), goken 14/14, CompCert 23/24, REAL 9FRONT 38/38 (f1 on a real Plan 9 fs via u9fs).
+- Next: translate the OpenTTD dedicated build itself (whole-program IR from the build, EH lowering, cbe, lower.py).

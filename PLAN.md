@@ -39,7 +39,12 @@ comes with libc++abi's typeinfo code, which the exception runtime needs anyway.
    Exceptions and RTTI stay (see Pipeline). **Threads: no OpenTTD patch.** The runtime's `pthread_create` fails;
    libc++'s `std::thread` throws `std::system_error`, OpenTTD's `StartNewThread` catches it and every caller runs the
    work inline (link graph jobs, saving, the game loop); mutexes stay and become no-ops in a single-threaded runtime.
-   On Linux `phase1/nothreads.c` does the same; the gate is identical with it (2026-11-26). Gate (`phase1/gate.sh`): the same savegames, run the same number of ticks,
+   On Linux `phase1/nothreads.c` does the same; the gate is identical with it (2026-11-26).
+   **std::filesystem: no OpenTTD patch either.** libc++'s implementation (`src/filesystem/*.cpp`) is translated with
+   the rest of libc++; `phase0/plan9/libc_p9.c` provides the POSIX calls it makes (stat, opendir/readdir, mkdir, remove,
+   rename, getcwd, realpath, strerror_r, ...) on Plan 9's dirstat/dirread/dirwstat/create, with glibc's x86-64 struct
+   layouts and Linux errno values. libc++ is configured without `__int128` (`_LIBCPP_HAS_NO_INT128`), which Plan 9
+   compilers lack. `phase0/tests/f1_filesystem.cpp` (the operations OpenTTD uses) is identical to native on real 9front. Gate (`phase1/gate.sh`): the same savegames, run the same number of ticks,
    give byte-identical saves vs the stock upstream build. OpenTTD 15.3; clang 17 + libc++ already matches stock gcc.
 2. **Compile the C on Plan 9.** Primary path (proven small by Phase 0.5): a Plan 9 dialect mode in llvm-cbe (what `lower.py` does today + explicit padding)
    + symbol-name hashing. Old gcc under APE is only a fallback. Gate: dedicated server runs natively on 9front amd64 (QEMU).

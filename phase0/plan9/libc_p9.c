@@ -32,6 +32,9 @@ struct CFile
 	int	n;		/* bytes in buf */
 	int	p;		/* read position in buf */
 	uchar	buf[Bufsize];
+	char	*mem;		/* snprintf: write here instead, at most memsize-1 bytes */
+	long	memsize;
+	long	memlen;
 };
 
 /* printf conversion flags */
@@ -95,6 +98,16 @@ cwrite(CFile *f, void *v, long n)
 	long m;
 
 	s = v;
+	if(f->mem != nil){
+		m = f->memsize - 1 - f->memlen;
+		if(m > n)
+			m = n;
+		if(m > 0){
+			memmove(f->mem + f->memlen, s, m);
+			f->memlen += m;
+		}
+		return 0;
+	}
 	if(f == &cerr){
 		cflush(&cout);
 		if(write(2, s, n) != n)
@@ -497,16 +510,58 @@ c_fprintf(CFile *f, char *fmt, ...)
 	return n;
 }
 
+/*
+ * The v*printf functions are called by translated code, where a va_list
+ * is the x86-64 ABI's: a pointer to a 24-byte __va_list_tag.  Translated
+ * va_start (shim/stdarg.h) keeps the Plan 9 va_list in its first word.
+ */
+
 int
-c_vprintf(char *fmt, va_list arg)
+c_vprintf(char *fmt, void *ap)
 {
-	return cvfprintf(c_stdout, fmt, arg);
+	return cvfprintf(c_stdout, fmt, *(va_list*)ap);
 }
 
 int
-c_vfprintf(CFile *f, char *fmt, va_list arg)
+c_vfprintf(CFile *f, char *fmt, void *ap)
 {
-	return cvfprintf(f, fmt, arg);
+	return cvfprintf(f, fmt, *(va_list*)ap);
+}
+
+static int
+cvsnprintf(char *buf, uvlong size, char *fmt, va_list arg)
+{
+	CFile f;
+	int n;
+
+	f.fd = -1;
+	f.wr = 1;
+	f.n = 0;
+	f.mem = buf;
+	f.memsize = size;
+	f.memlen = 0;
+	n = cvfprintf(&f, fmt, arg);
+	if(size > 0)
+		buf[f.memlen] = 0;
+	return n;
+}
+
+int
+c_vsnprintf(char *buf, uvlong size, char *fmt, void *ap)
+{
+	return cvsnprintf(buf, size, fmt, *(va_list*)ap);
+}
+
+int
+c_snprintf(char *buf, uvlong size, char *fmt, ...)
+{
+	va_list arg;
+	int n;
+
+	va_start(arg, fmt);
+	n = cvsnprintf(buf, size, fmt, arg);
+	va_end(arg);
+	return n;
 }
 
 /*
@@ -822,6 +877,424 @@ uvlong
 c_strlen(char *s)
 {
 	return strlen(s);
+}
+
+/*
+ * POSIX file system calls used by libc++'s std::filesystem, on Plan 9's
+ * dirstat, dirread, dirwstat, create and remove.  The structures are
+ * glibc's x86-64 layouts and errno values are Linux's, since that is
+ * what the translated code was compiled against.  Plan 9 has no
+ * symbolic links: lstat is stat.
+ */
+
+enum
+{
+	Eio		= 5,
+	Enoent		= 2,
+	Eacces		= 13,
+	Eexist		= 17,
+	Exdev		= 18,
+	Enotdir		= 20,
+	Eisdir		= 21,
+	Einval		= 22,
+	Enotempty	= 39,
+
+	Sifdir		= 0040000,
+	Sifreg		= 0100000,
+	Dtdir		= 4,
+	Dtreg		= 8,
+
+	Pathmax		= 4096,
+};
+
+typedef struct Ctimespec Ctimespec;
+typedef struct Cstat Cstat;
+typedef struct Cdirent Cdirent;
+typedef struct Cdir Cdir;
+
+struct Ctimespec
+{
+	vlong	sec;
+	vlong	nsec;
+};
+
+/* glibc struct stat, x86-64: 144 bytes */
+struct Cstat
+{
+	uvlong	dev;
+	uvlong	ino;
+	uvlong	nlink;
+	uint	mode;
+	uint	uid;
+	uint	gid;
+	int	pad0;
+	uvlong	rdev;
+	vlong	size;
+	vlong	blksize;
+	vlong	blocks;
+	Ctimespec	atim;
+	Ctimespec	mtim;
+	Ctimespec	ctim;
+	vlong	reserved[3];
+};
+
+/* glibc struct dirent, x86-64: d_name at offset 19 */
+#pragma pack on
+struct Cdirent
+{
+	uvlong	ino;
+	vlong	off;
+	ushort	reclen;
+	uchar	type;
+	char	name[256];
+	uchar	pad[5];
+};
+#pragma pack off
+
+/* DIR */
+struct Cdir
+{
+	int	fd;
+	Dir	*ents;
+	long	n;
+	long	i;
+	Cdirent	ent;
+};
+
+/*
+ * Set errno from the Plan 9 error string (9front's, or the host's under
+ * goken).  goken's libc leaves it empty when a file does not exist.
+ */
+static void
+seterrno(void)
+{
+	char e[ERRMAX];
+
+	rerrstr(e, sizeof e);
+	if(e[0] == 0 || strstr(e, "not exist") != nil || strstr(e, "No such file") != nil || strstr(e, "not found") != nil)
+		cerrno = Enoent;
+	else if(strstr(e, "not empty") != nil)
+		cerrno = Enotempty;
+	else if(strstr(e, "exist") != nil || strstr(e, "File exists") != nil)
+		cerrno = Eexist;
+	else if(strstr(e, "not a directory") != nil || strstr(e, "Not a directory") != nil)
+		cerrno = Enotdir;
+	else if(strstr(e, "is a directory") != nil || strstr(e, "Is a directory") != nil)
+		cerrno = Eisdir;
+	else if(strstr(e, "permission denied") != nil || strstr(e, "Permission denied") != nil)
+		cerrno = Eacces;
+	else
+		cerrno = Eio;
+}
+
+static void
+dirtostat(Dir *d, Cstat *st)
+{
+	memset(st, 0, sizeof *st);
+	st->ino = d->qid.path;
+	st->nlink = 1;
+	st->mode = d->mode & 0777;
+	if(d->mode & DMDIR)
+		st->mode |= Sifdir;
+	else
+		st->mode |= Sifreg;
+	st->size = d->length;
+	st->blksize = 8192;
+	st->blocks = (d->length + 511) / 512;
+	st->atim.sec = d->atime;
+	st->mtim.sec = d->mtime;
+	st->ctim.sec = d->mtime;
+}
+
+int
+c_stat(char *path, Cstat *st)
+{
+	Dir *d;
+
+	d = dirstat(path);
+	if(d == nil){
+		seterrno();
+		return -1;
+	}
+	dirtostat(d, st);
+	free(d);
+	return 0;
+}
+
+int
+c_lstat(char *path, Cstat *st)
+{
+	return c_stat(path, st);
+}
+
+int
+c_fstat(int fd, Cstat *st)
+{
+	Dir *d;
+
+	d = dirfstat(fd);
+	if(d == nil){
+		seterrno();
+		return -1;
+	}
+	dirtostat(d, st);
+	free(d);
+	return 0;
+}
+
+int
+c_mkdir(char *path, uint mode)
+{
+	Dir *d;
+	int fd;
+
+	d = dirstat(path);
+	if(d != nil){
+		free(d);
+		cerrno = Eexist;
+		return -1;
+	}
+	fd = create(path, OREAD, DMDIR | (mode & 0777));
+	if(fd < 0){
+		seterrno();
+		return -1;
+	}
+	close(fd);
+	return 0;
+}
+
+/*
+ * After a failed remove the file's state says more than the error
+ * string (which goken leaves empty): gone, a directory (so not empty),
+ * or something else.
+ */
+int
+c_remove(char *path)
+{
+	Dir *d;
+
+	if(remove(path) == 0)
+		return 0;
+	d = dirstat(path);
+	if(d == nil)
+		cerrno = Enoent;
+	else{
+		if(d->mode & DMDIR)
+			cerrno = Enotempty;
+		else
+			seterrno();
+		free(d);
+	}
+	return -1;
+}
+
+/* split a path into a cleaned directory and the last element */
+static void
+splitpath(char *path, char *dir, char *base)
+{
+	char *s;
+
+	strecpy(dir, dir + Pathmax, path);
+	cleanname(dir);
+	s = strrchr(dir, '/');
+	if(s == nil){
+		strecpy(base, base + Pathmax, dir);
+		strcpy(dir, ".");
+	}else{
+		strecpy(base, base + Pathmax, s + 1);
+		if(s == dir)
+			s[1] = 0;
+		else
+			*s = 0;
+	}
+}
+
+/*
+ * Plan 9 renames by changing the name in place (wstat), so only within
+ * a directory, and not over an existing file, which POSIX replaces.
+ */
+int
+c_rename(char *old, char *new)
+{
+	char odir[Pathmax], obase[Pathmax], ndir[Pathmax], nbase[Pathmax];
+	Dir d, *e;
+
+	splitpath(old, odir, obase);
+	splitpath(new, ndir, nbase);
+	if(strcmp(odir, ndir) != 0){
+		cerrno = Exdev;
+		return -1;
+	}
+	if(strcmp(obase, nbase) == 0)
+		return 0;
+	e = dirstat(new);
+	if(e != nil){
+		free(e);
+		if(remove(new) < 0){
+			seterrno();
+			return -1;
+		}
+	}
+	nulldir(&d);
+	d.name = nbase;
+	if(dirwstat(old, &d) < 0){
+		seterrno();
+		return -1;
+	}
+	return 0;
+}
+
+char*
+c_getcwd(char *buf, uvlong size)
+{
+	if(buf == nil){
+		size = Pathmax;
+		buf = malloc(size);
+		if(buf == nil)
+			return nil;
+	}
+	if(getwd(buf, size) == nil){
+		seterrno();
+		return nil;
+	}
+	return buf;
+}
+
+/* no symbolic links: the clean absolute name of an existing file */
+char*
+c_realpath(char *path, char *resolved)
+{
+	char buf[Pathmax];
+	Dir *d;
+
+	if(path[0] == '/')
+		strecpy(buf, buf + sizeof buf, path);
+	else{
+		if(getwd(buf, sizeof buf) == nil){
+			seterrno();
+			return nil;
+		}
+		strecpy(buf + strlen(buf), buf + sizeof buf, "/");
+		strecpy(buf + strlen(buf), buf + sizeof buf, path);
+	}
+	cleanname(buf);
+	d = dirstat(buf);
+	if(d == nil){
+		seterrno();
+		return nil;
+	}
+	free(d);
+	if(resolved == nil){
+		resolved = malloc(Pathmax);
+		if(resolved == nil)
+			return nil;
+	}
+	strecpy(resolved, resolved + Pathmax, buf);
+	return resolved;
+}
+
+Cdir*
+c_opendir(char *path)
+{
+	Cdir *dp;
+	Dir *d;
+	int fd;
+
+	d = dirstat(path);
+	if(d == nil){
+		seterrno();
+		return nil;
+	}
+	if((d->mode & DMDIR) == 0){
+		free(d);
+		cerrno = Enotdir;
+		return nil;
+	}
+	free(d);
+	fd = open(path, OREAD);
+	if(fd < 0){
+		seterrno();
+		return nil;
+	}
+	dp = mallocz(sizeof *dp, 1);
+	if(dp == nil){
+		close(fd);
+		return nil;
+	}
+	dp->fd = fd;
+	return dp;
+}
+
+/* end of directory: nil with errno unchanged */
+Cdirent*
+c_readdir(Cdir *dp)
+{
+	Dir *d;
+
+	if(dp->i >= dp->n){
+		free(dp->ents);
+		dp->ents = nil;
+		dp->i = 0;
+		dp->n = dirread(dp->fd, &dp->ents);
+		if(dp->n <= 0){
+			dp->n = 0;
+			return nil;
+		}
+	}
+	d = &dp->ents[dp->i++];
+	memset(&dp->ent, 0, sizeof dp->ent);
+	dp->ent.ino = d->qid.path;
+	dp->ent.off = dp->i;
+	dp->ent.reclen = sizeof dp->ent;
+	dp->ent.type = (d->mode & DMDIR) ? Dtdir : Dtreg;
+	strecpy(dp->ent.name, dp->ent.name + sizeof dp->ent.name, d->name);
+	return &dp->ent;
+}
+
+int
+c_closedir(Cdir *dp)
+{
+	close(dp->fd);
+	free(dp->ents);
+	free(dp);
+	return 0;
+}
+
+/* GNU strerror_r (what glibc's headers select for C++): glibc's texts */
+char*
+strerror_r(int e, char *buf, uvlong size)
+{
+	char *s;
+
+	switch(e){
+	case 0:		s = "Success"; break;
+	case Enoent:	s = "No such file or directory"; break;
+	case Eio:	s = "Input/output error"; break;
+	case Eacces:	s = "Permission denied"; break;
+	case Eexist:	s = "File exists"; break;
+	case Exdev:	s = "Invalid cross-device link"; break;
+	case Enotdir:	s = "Not a directory"; break;
+	case Eisdir:	s = "Is a directory"; break;
+	case Einval:	s = "Invalid argument"; break;
+	case Erange:	s = "Numerical result out of range"; break;
+	case Enotempty:	s = "Directory not empty"; break;
+	default:
+		snprint(buf, size, "Unknown error %d", e);
+		return buf;
+	}
+	return s;
+}
+
+/* clock_gettime: every clock is the time of day */
+int
+clock_gettime(int, Ctimespec *ts)
+{
+	vlong ns;
+
+	ns = nsec();
+	ts->sec = ns / 1000000000LL;
+	ts->nsec = ns % 1000000000LL;
+	return 0;
 }
 
 /*

@@ -69,3 +69,17 @@ real 9front (bundle 37/37).
 Found on the way: a cbe GEP bug (a struct field that is an array, indexed after the `P->field` shortcut, lost its
 `.array`), static constructors for kencc (`lower.py` emits `__p9_ctors`), glibc's `__errno_location`,
 `__isoc23_strtol` and `__atomic_*` calls in libc_p9.c / rt_p9.c.
+
+## std::filesystem
+`tests/f1_filesystem.cpp` uses the std::filesystem operations OpenTTD uses (path decomposition, exists,
+create_directories, file_size, rename over an existing file, remove, directory_iterator, last_write_time,
+weakly_canonical; error_code overloads). libc++'s filesystem sources are part of `out/libcxx.ll`; on Plan 9,
+`plan9/libc_p9.c` implements the POSIX calls (stat/lstat/fstat, opendir/readdir/closedir, mkdir, remove, rename,
+getcwd, realpath, snprintf/vsnprintf, strerror_r, clock_gettime) with glibc's x86-64 `struct stat`/`struct dirent`
+layouts and Linux errno values; `lower.py --libc` renames the ones that clash with Plan 9 libc. Result 2026-11-26:
+identical to native on gcc, goken 6c and real 9front (bundle 38/38).
+Found on the way: llvm-cbe turns `sret` functions into struct-returning C functions, which an `__invoke_` wrapper
+calling them with the IR signature does not match (mkinvoke.py now drops `sret`); variadic invokes (mkinvoke.py
+specializes them per call site); lower.py renamed identifiers inside string literals ("exit.sav" became "c_exit.sav");
+x86-64 `va_list` is a pointer to a tag (shim/stdarg.h, v*printf take the pointer); goken's libc leaves errstr empty
+for missing files; 9front's preprocessor garbles a string-literal argument of a macro whose body has a string literal.

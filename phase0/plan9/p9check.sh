@@ -49,12 +49,17 @@ say()
 	echo "$name: $*"
 }
 
-# shim dir name: compile dir/name.c when it is newer than its object
+# shim dir name: compile dir/name.c when it or a header it may use
+# (eh/, eh/plan9/) is newer than its object
 shim()
 {
-	if [ ! "$out/p9/$2.6" -nt "$1/$2.c" ]; then
-		6c -w -Damd64 $inc $ehinc -o "$out/p9/$2.6" "$1/$2.c" || fatal "cannot compile $2.c"
-	fi
+	local f
+	for f in "$1/$2.c" "$top"/eh/*.h "$top"/eh/plan9/*.h; do
+		if [ ! "$out/p9/$2.6" -nt "$f" ]; then
+			6c -w -Damd64 $inc $ehinc -o "$out/p9/$2.6" "$1/$2.c" || fatal "cannot compile $2.c"
+			return
+		fi
+	done
 }
 
 translate()

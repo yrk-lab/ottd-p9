@@ -19,3 +19,7 @@ int __atomic_compare_exchange_8(volatile void *p, void *expected, uint64_t desir
 	volatile uint64_t *q = p; uint64_t *e = expected; (void)s; (void)f;
 	if (*q == *e) { *q = desired; return 1; } *e = *q; return 0;
 }
+/* Guards for function-local statics (single threaded): byte 0 of the guard is set once initialized. */
+int  __cxa_guard_acquire(uint64_t *g) { return *(volatile char *)g == 0; }
+void __cxa_guard_release(uint64_t *g) { *(volatile char *)g = 1; }
+void __cxa_guard_abort(uint64_t *g)   { (void)g; }

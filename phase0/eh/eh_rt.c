@@ -51,18 +51,38 @@ obj(Exc *e)
 	return (char*)e + Hdr;
 }
 
+/* flush stdout, say why (and what), abort */
+static void
+terminate2(char *why, char *what)
+{
+	eh_flush();
+	eh_puts("terminate: ");
+	eh_puts(why);
+	if(what != NULL){
+		eh_puts(" ");
+		eh_puts(what);
+	}
+	eh_puts("\n");
+	abort();
+}
+
 static void
 terminate(char *why)
 {
-	eh_die(why);
+	terminate2(why, NULL);
 }
 
 /* resume at the innermost __invoke_ wrapper */
 static void
 unwind(void)
 {
-	if(eh_top == NULL)
-		terminate("uncaught exception");
+	char **ti;
+
+	if(eh_top == NULL){
+		/* std::type_info is { vtable, mangled name } */
+		ti = thrown != NULL ? (char**)thrown->type : NULL;
+		terminate2("uncaught exception of type", ti != NULL ? ti[1] : "?");
+	}
 	longjmp(eh_top->jb, 1);
 }
 

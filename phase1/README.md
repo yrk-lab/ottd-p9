@@ -35,5 +35,6 @@ inline. No OpenTTD patch is needed. (`-d misc=1` shows "Can't create thread 'ott
 
 Status 2026-11-26: clang 17 + libc++, exceptions and RTTI on, no threads, gives saves byte-identical to stock gcc +
 libstdc++ with threads (both scenarios). Host tools (strgen, settingsgen) come from the reference build via
-`HOST_BINARY_DIR`. `patches/series` is still empty. Next: std::filesystem and other OS dependencies, then translating
-the build.
+`HOST_BINARY_DIR`. `patches/series` is still empty: std::filesystem needs no patch either (libc++'s implementation is
+translated; Plan 9 POSIX shims in ../phase0/plan9/libc_p9.c, tested by ../phase0/tests/f1_filesystem.cpp on 9front).
+Next: translating the OpenTTD build itself.

@@ -3,4 +3,5 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define	eh_die(s)	(fprintf(stderr, "terminate: %s\n", (s)), abort())
+#define	eh_puts(s)	fputs((s), stderr)
+#define	eh_flush()	fflush(stdout)

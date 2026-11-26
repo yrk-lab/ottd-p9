@@ -5,8 +5,9 @@ import re, sys
 s = sys.stdin.read()
 LIBC = "--libc" in sys.argv[1:]   # translated ISO C program: route libc references through libc_p9.c
 # ISO C names whose Plan 9 counterparts are missing or have a different ABI (long = 32 bit on Plan 9 amd64)
-RENAMED = """printf fprintf vprintf vfprintf putc fputc putchar fputs puts fwrite fflush fopen fclose getc fgetc
-getchar fgets perror strtol strtoul atol labs strlen exit stdin stdout stderr main""".split()
+RENAMED = """printf fprintf vprintf vfprintf snprintf vsnprintf putc fputc putchar fputs puts fwrite fflush fopen fclose
+getc fgetc getchar fgets perror strtol strtoul atol labs strlen exit stdin stdout stderr main
+stat lstat fstat opendir readdir closedir mkdir remove rename getcwd realpath""".split()
 
 # 1. Preamble: 6c has no #if. Drop every #if..#endif block and all #includes; keep helper function definitions.
 m = re.search(r"/\* Provide Declarations \*/(.*?)/\* Global Declarations \*/", s, flags=re.S)
@@ -50,7 +51,10 @@ s = re.sub(r"__ATTRIBUTE_(CTOR|DTOR)__", "", s)
 s += "\nvoid __p9_ctors(void) {\n" + "".join("  %s();\n" % c for c in dict.fromkeys(ctors)) + "}\n"
 
 if LIBC:
-    s = re.sub(r"\b(" + "|".join(RENAMED) + r")\b", r"c_\1", s)
-sys.stdout.write("#include <stdint.h>\n#include <math.h>\ntypedef unsigned char bool;\n"
+    # rename identifiers only, never inside string literals ("save/autosave/exit.sav")
+    ident = re.compile(r"\b(" + "|".join(RENAMED) + r")\b")
+    parts = re.split(r'("(?:\\.|[^"\\])*")', s)
+    s = "".join(p if i % 2 else ident.sub(r"c_\1", p) for i, p in enumerate(parts))
+sys.stdout.write("#include <stdint.h>\n#include <math.h>\n#include <stdarg.h>\ntypedef unsigned char bool;\n"
                  "#define __UNALIGNED_LOAD__(type, align, op) (*(type*)(op))\n"
                  "void abort(void);\n#define __builtin_unreachable() for(;;) abort()\n#define __builtin_trap() abort()\n" + s)

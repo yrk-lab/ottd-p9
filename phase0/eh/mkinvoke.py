@@ -1,7 +1,16 @@
 #!/usr/bin/env python3
-# mkinvoke < lowered.ll > invoke.c
+# mkinvoke lowered.ll fixed.ll invoke.c
 #	Write the C wrappers that the Emscripten exception lowering left
-#	declared in an LLVM IR module:
+#	declared in an LLVM IR module, and a copy of the module (fixed.ll)
+#	in which every call of a variadic wrapper (an invoke of a variadic
+#	function) uses its own non-variadic wrapper, named after the types
+#	of its extra arguments: C cannot forward "...", but it can call a
+#	variadic function with concrete arguments.  fixed.ll also has no
+#	sret attributes: llvm-cbe turns an sret function into one that
+#	returns the struct by value, which a wrapper calling it with the
+#	IR's (ptr, args...) signature would not match.  Without sret the
+#	result pointer is an ordinary first parameter, in the definition
+#	and at every call.  The wrappers are:
 #	__invoke_<sig>(fn, args...)	call fn(args...) under a setjmp frame;
 #				if it throws, set __THREW__ and return 0
 #	__cxa_find_matching_catch_<n>	collect the n-2 catch types for eh_match
@@ -87,12 +96,17 @@ def split(params):
 		ps.append(cur)
 	return [p.strip() for p in ps]
 
-def invoke(name, ret, params):
+# nfixed: for a specialized variadic wrapper, the number of the
+# callee's fixed parameters; the rest are passed through "..."
+def invoke(name, ret, params, nfixed=None):
 	r = ctype(ret)[0]
 	args = [ctype(p)[0] for p in params[1:]]	# params[0] is the function
 	formal = ", ".join(["void *fn"] + ["%s a%d" % (t, i) for i, t in enumerate(args)])
 	actual = ", ".join("a%d" % i for i in range(len(args)))
-	fntype = "%s (*)(%s)" % (r, ", ".join(args) or "void")
+	if nfixed is None:
+		fntype = "%s (*)(%s)" % (r, ", ".join(args) or "void")
+	else:
+		fntype = "%s (*)(%s)" % (r, ", ".join(args[:nfixed] + ["..."]))
 	out = ["%s\n%s(%s)\n{\n\tEhframe f;\n" % (r, name, formal)]
 	if r != "void":
 		out.append("\t%s r;\n\tstatic %s zero;\n" % (r, r))
@@ -120,15 +134,60 @@ def findcatch(name, n):
 		body += "\treturn eh_match(t, %d);\n" % k
 	return "void*\n%s(%s)\n{\n%s}\n\n" % (name, formal, body)
 
+# the type of one call argument: "ptr noundef nonnull %3" -> "ptr"
+def argtype(a):
+	a = a.strip()
+	if a.startswith("{"):
+		depth = 0
+		for i, c in enumerate(a):
+			depth += c == "{"
+			depth -= c == "}"
+			if depth == 0:
+				return a[:i+1]
+	return a.split()[0]
+
+def typename(t):
+	return re.sub(r"[^a-z0-9]+", "", clean(t))
+
+if len(sys.argv) != 4:
+	sys.exit("usage: mkinvoke lowered.ll fixed.ll invoke.c")
+lines = open(sys.argv[1]).readlines()
+
+# drop sret(<type>) attributes
+sretre = re.compile(r'\s*\bsret\((%"[^"]*"|%[-\w.]+|\{[^}]*\}|\[[^\]]*\]|[\w.]+)\)')
+lines = [sretre.sub("", l) for l in lines]
+
+# specialize the calls of variadic wrappers
+variadic = {}	# specialized name: (ret, fixed params, extra types)
+callre = re.compile(r'call (\S.*?) \((.*), \.\.\.\) @"?(__invoke_[^"(]*\.\.\.)"?\((.*)\)(.*)$')
+for i, line in enumerate(lines):
+	m = callre.search(line)
+	if not m:
+		continue
+	ret, fixed, name, args, rest = m.groups()
+	fixed = split(fixed)
+	args = split(args)
+	extra = [argtype(a) for a in args[len(fixed):]]
+	spec = name.replace("...", "v") + "".join("_" + typename(t) for t in extra)
+	variadic[spec] = (ret, fixed, extra)
+	lines[i] = line[:m.start()] + 'call %s @"%s"(%s)%s\n' % (ret, spec, ", ".join(args), rest.rstrip("\n"))
+lines = [l for l in lines if not re.match(r'declare .*@"?__invoke_[^"(]*\.\.\."?\(', l)]
+for spec, (ret, fixed, extra) in variadic.items():
+	lines.append('declare %s @"%s"(%s)\n' % (ret, spec, ", ".join(fixed + extra)))
+open(sys.argv[2], "w").writelines(lines)
+
 funcs = []
 seen = set()
-for line in sys.stdin:
+for line in lines:
 	m = re.match(r'declare\s+(?:[a-z_]+\s+)*?(\S.*?)\s+@"?(__invoke_[^"(]+|__cxa_find_matching_catch_(\d+))"?\((.*)\)', line)
 	if not m or m.group(2) in seen:
 		continue
 	seen.add(m.group(2))
 	if m.group(3):
 		funcs.append(findcatch(m.group(2), int(m.group(3))))
+	elif m.group(2) in variadic:
+		ret, fixed, extra = variadic[m.group(2)]
+		funcs.append(invoke(mangle(m.group(2)), ret, fixed + extra, len(fixed) - 1))
 	else:
 		funcs.append(invoke(mangle(m.group(2)), m.group(1), split(m.group(4))))
 
@@ -137,4 +196,4 @@ if decls:
 	out.append("#ifdef __GNUC__\n#pragma pack(push, 1)\n#else\n#pragma pack on\n#endif\n")
 	out.append("\n".join(decls))
 	out.append("#ifdef __GNUC__\n#pragma pack(pop)\n#else\n#pragma pack off\n#endif\n\n")
-sys.stdout.write("".join(out + funcs))
+open(sys.argv[3], "w").write("".join(out + funcs))

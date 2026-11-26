@@ -3,4 +3,8 @@
 #include <libc.h>
 
 #define	NULL	nil
-#define	eh_die(s)	(fprint(2, "terminate: %s\n", (s)), abort())
+
+int	c_fflush(void*);	/* libc_p9.c: stdout is buffered there */
+/* no string literal in a macro body: 9front's cpp garbles string arguments then */
+#define	eh_puts(s)	write(2, (s), strlen(s))
+#define	eh_flush()	c_fflush(nil)
