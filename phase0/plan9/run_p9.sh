@@ -1,6 +1,22 @@
 #!/bin/bash
-# Phase 0.5 gate: every test (tests/ and tests_p9/) must give identical output natively and through kencc 6c.
-P=$(cd "$(dirname "$0")" && pwd); pass=0; fail=0
-for src in "$P"/../tests/*.cpp "$P"/../tests_p9/*.cpp; do
-  if bash "$P/p9check.sh" "$src" 2>&1 | tee /dev/stderr | grep -q ': PASS'; then pass=$((pass+1)); else fail=$((fail+1)); fi
-done 2>&1 | grep -E 'PASS|MISMATCH|FAIL'
+# run_p9
+#	Phase 0.5 fast loop: every C++ test in tests/ and tests_p9/
+#	through p9check (translator + goken 6c on Linux).
+#	Run plan9/setup_goken.sh once first.
+set -uo pipefail
+. "$(dirname "$0")/../common.sh"
+
+[ -f "$out/libcxx_min.ll" ] || "$top/build_libcxx.sh" || exit 1
+
+pass=0
+n=0
+for f in "$top"/tests/*.cpp "$top"/tests_p9/*.cpp; do
+	n=$((n+1))
+	r=$("$top/plan9/p9check.sh" "$f")
+	echo "$r"
+	case $r in
+	*": PASS")	pass=$((pass+1)) ;;
+	esac
+done
+echo "c++ tests: $pass/$n"
+[ $pass -eq $n ]

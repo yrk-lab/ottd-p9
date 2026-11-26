@@ -17,7 +17,8 @@ The user wants early, concrete confirmation (gates) before big investment.
 - Has CMake 4.x (newer than Ubuntu's apt 3.28). Can run a 9front VM in QEMU.
 - Session 2 facts: the WSL distro is actually Ubuntu 26.04.1 ("resolute"), not 24.04. Passwordless sudo is configured
   (/etc/sudoers.d/90-yrk-nopasswd). /dev/kvm exists (nested virt on) but is root:kvm 0660 and the user was NOT yet in group
-  kvm at the end of session 2 (told: sudo usermod -aG kvm $USER, then wsl --shutdown or newgrp kvm).
+  kvm until late in session 2; now added (usermod -aG kvm). Until WSL restarts (wsl --shutdown) the login session lacks the group;
+  there is no sg/newgrp on this distro, so run_9front.sh falls back to `sudo -n setpriv --init-groups` to get KVM.
 - Repo: git@github.com:yrk-lab/ottd-p9.git (branch main). Everything is in git now; the tarball/sandbox notes in section 5 are history.
 - The user prefers Plan 9 style for Plan 9 C (style(6), existing libc code) and suggested u9fs + QEMU like the CI of their rd project.
 - Timezone Europe/Dublin. Communicates tersely ("Continue").
@@ -40,7 +41,7 @@ The user wants early, concrete confirmation (gates) before big investment.
 === 4. PHASE PLAN ===
 0.   Feasibility: toy C++ (classes/templates/lambdas/STL, libc++ itself translated) through
      the pipeline, output identical to native build.          -> DONE, PASSED (also on user's machine)
-0.5  Plan 9 compiler acceptance (added this session).          -> PASSED on goken 6c (Linux); 9front FAILS (C++ tests, see 11)
+0.5  Plan 9 compiler acceptance (added this session).          -> PASSED: goken 6c, and REAL 9front 32/32 (see 11, 12)
 1.   OpenTTD dedicated server, no graphics: OPTION_DEDICATED=ON, no threads, no
      ICU/harfbuzz/freetype/fontconfig/curl/SDL/fluidsynth. Build zlib + liblzma (C). libc++ without
      threads/localization/filesystem. Patch series for exception sites + std::filesystem.
@@ -82,7 +83,7 @@ phase0/
     p9check.sh        one test: clang->IR->prune->cbe(-cbe-explicit-padding)->lower.py->6c->6l(goken libc)->run->diff
     run_p9.sh         all tests;  setup_goken.sh builds goken9cc + libc (~10 min)
     p9bundle.sh       collects lowered C + shims into out/p9bundle/ with run9front.rc (UNTESTED rc script)
-Typical env:  W=<phase0>/work  G=<goken9cc dir>
+Typical env (since session 2): work=<phase0>/work goken=<goken9cc dir> (lowercase, see common.sh)
 
 === 6. FINDINGS (technical, verified unless marked) ===
 llvm-cbe
@@ -166,7 +167,7 @@ Approximate, from grep surveys:
   /usr/bin/ paths when goken's PATH is active.
 - /bin/sh is dash here: process substitution <(...) fails -> use bash -c / #!/bin/bash.
 - apt lock contention if two apt-get run in parallel.
-- common.sh sets HERE; scripts sourcing it must not reuse the name (p9check.sh uses P).
+- common.sh sets top, work, out, cbe, goken, nine; scripts sourcing it must not reuse those names.
 - tests must avoid %zu (Plan 9 print lacks it); cast to unsigned and use %u.
 - Be careful: WebFetch of github.com/<repo>/tree/... is robots-blocked; clone with git in the sandbox instead.
 
@@ -242,3 +243,18 @@ Next steps now (replace section 10's first two items):
    run_9front.sh (with KVM once the user is in group kvm). Investigate any traps that survive the fix.
 2. Fold the 9front run into one gate script (goken fast loop + 9front truth) and add it to PLAN.md.
 3. Then Phase 1a as in section 10 item 3.
+
+=== 12. SESSION 2, LATER: 9FRONT PASSES; SCRIPTS RESTYLED ===
+- Fix for the 9front C++ failures: C++ tests now also go through lower.py --libc and link libc_p9.6 (its main() wraps the renamed
+  c_main, printf is ours). The perl printf->print step is gone. rt_p9.c is only the C++ runtime (bcmp/ceilf moved to libc_p9.c);
+  every test links rt_p9.6 + libc_p9.6. The traps seen earlier (m2, m5, t3) disappeared with this fix: they were knock-on effects.
+- RESULT, real 9front 11952 (QEMU+KVM, diskless, root over u9fs): 32/32 PASS (8 C++ + 24 CompCert incl. binarytrees), ~3.5 min.
+  Earlier TCG run (no KVM) took > 1 h and was stopped. goken: C++ 8/8, CompCert 23/24 (binarytrees = goken malloc). Phase 0 3/3.
+- Scripts rewritten in Plan 9 style (tabs, one command per line, lowercase variables like $objtype, small functions, usage
+  comments): common.sh now exports lowercase settings work out cbe goken nine triple cxxflags cflags (was W G OUT CBE TRIPLE
+  CXXFLAGS) and helpers fatal() and gokenpath(). p9check.sh handles .cpp and .c (p9check_c.sh removed; options -x clangflags,
+  -e expected); all per-test output is in out/p9/<name>/ (out/p9c is gone) with ref.out/ref.rc and p9.out/p9.rc.
+  plan9/run9front.rc and plan9/termrc.local are now real files (no heredocs). Bundle layout: tests/<name>.{c,expected,rc}.
+  Still bash on the Linux side (no plan9port dependency); rc could replace it later if wanted.
+- Next: Phase 1a (OpenTTD dedicated server natively with clang -fno-exceptions, patch series), per section 10 item 3. Consider
+  making `plan9/run_p9.sh && plan9/run_compcert.sh && plan9/p9bundle.sh && plan9/run_9front.sh` the single Phase 0.5 gate.

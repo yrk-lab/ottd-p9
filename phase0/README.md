@@ -4,7 +4,7 @@ Question answered: *can the clang -> llvm-cbe pipeline translate C++20 code that
 dispatch, static init and the STL (with libc++ itself translated too), and produce programs whose behaviour is identical
 to the native build?*
 
-## Run it (WSL2 Ubuntu 24.04)
+## Run it (WSL2 Ubuntu 24.04 or 26.04)
 ```
 ./setup.sh          # apt packages, pinned+patched llvm-cbe, libc++ 17.0.6 sources (~12 MB sparse clone)
 ./run_phase0.sh     # builds libc++ IR once, then runs every test through the pipeline
@@ -44,8 +44,14 @@ Also: llvm-cbe master now needs LLVM 22; setup pins rev 5341f88 (last before LLV
 
 ## Phase 0.5 (Plan 9 compiler acceptance)
 ```
-plan9/setup_goken.sh      # builds goken9cc (kencc hosted on Linux) + Plan 9-style libc.a  (~10 min)
-plan9/run_p9.sh           # all tests through 6c; output must equal the native build
-plan9/p9bundle.sh         # lowered C + shims for a run on real 9front: out/p9bundle/run9front.rc (untested)
+plan9/setup_goken.sh      # once: goken9cc (kencc hosted on Linux) + Plan 9 style libc.a  (~10 min)
+plan9/run_p9.sh           # C++ tests through 6c (fast loop); output must equal the native build
+plan9/run_compcert.sh     # goken's 24 CompCert benchmarks (ISO C) the same way
+plan9/p9check.sh f.cpp    # one test (.cpp or .c)
+plan9/setup_9front.sh     # once: 9front root, kernel, u9fs in ~/9front (needs sudo)
+plan9/p9bundle.sh         # pack the translated tests: out/p9bundle/
+plan9/run_9front.sh       # boot 9front diskless in QEMU, run the bundle, print results
 ```
-Result in my sandbox: 8/8 identical (t1-t3, m1-m5). See PLAN.md for what 6c needed and the cbe patch (`-cbe-explicit-padding`).
+Settings (`common.sh`) can be overridden from the environment: `work out cbe goken nine triple`.
+Result on the user's WSL (2026-11-26): goken C++ 8/8, CompCert 23/24 (binarytrees: goken's never-freeing malloc);
+**real 9front 32/32**. See PLAN.md for what 6c and the Plan 9 libc needed.

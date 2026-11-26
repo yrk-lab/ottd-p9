@@ -1,0 +1,14 @@
+#!/bin/rc
+# termrc.local for run_9front.sh, copied into the served root.
+# On a boot with the kernel argument p9test=yes, run the bundle,
+# record the result and power off.  Other boots are unaffected.
+if(~ $p9test yes){
+	cd /p9bundle
+	rc run9front.rc >results.txt >[2=1]
+	if(~ $status '')
+		echo 0 >exitcode
+	if not
+		echo 1 >exitcode
+	cat results.txt
+	echo reboot >/dev/reboot
+}

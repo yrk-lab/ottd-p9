@@ -1,32 +1,54 @@
 #!/bin/bash
-# Phase 0.5 on REAL 9front, headless: boot the 9front kernel diskless in QEMU with its root file system served from the
-# host by u9fs (pattern from yrk-lab/rd CI), run out/p9bundle/run9front.rc at boot, power off, report.
-#   one-time: plan9/setup_9front.sh        each run: plan9/p9bundle.sh && plan9/run_9front.sh
-# QEMU guestfwd (on 10.0.2.100; slirp refuses its own gateway 10.0.2.2) starts u9fs per 9P connection on stdin/stdout,
-# inside an unprivileged user namespace (unshare -r) so its chroot works: no sudo, socat or port 564 on the host.
-set -uo pipefail; P=$(cd "$(dirname "$0")" && pwd); . "$P/../common.sh"
-N=${NINE:-$HOME/9front}; R=$N/root; B=$OUT/p9bundle
-[ -x "$N/u9fs" ] && [ -f "$N/9pc64" ] && [ -d "$R/rc" ] || { echo "no 9front root in $N: run plan9/setup_9front.sh" >&2; exit 2; }
-[ -f "$B/run9front.rc" ] || { echo "no bundle: run plan9/p9bundle.sh" >&2; exit 2; }
-rm -rf "$R/p9bundle"; cp -r "$B" "$R/p9bundle"; rm -f "$R/p9bundle/exitcode" "$R/p9bundle/results.txt"
-cat > "$R/rc/bin/termrc.local" <<'RC'
-#!/bin/rc
-# Only on boots started by run_9front.sh (kernel arg p9test=yes); a normal boot of this root is unaffected.
-if(~ $p9test yes){
-	cd /p9bundle
-	rc run9front.rc >results.txt >[2=1]
-	if(~ $status '') echo 0 >exitcode
-	if not echo 1 >exitcode
-	cat results.txt
-	echo reboot >/dev/reboot
-}
-RC
-ACCEL="-enable-kvm -cpu host"; [ -w /dev/kvm ] || ACCEL=""
-timeout "${TIMEOUT:-1200}" qemu-system-x86_64 $ACCEL -m 2G -smp 2 -nographic -no-reboot \
-  -kernel "$N/9pc64" \
-  -append "nobootprompt=tcp fs=10.0.2.100 auth=10.0.2.100 console=0 b115200 user=glenda p9test=yes" \
-  -netdev "user,id=n0,guestfwd=tcp:10.0.2.100:564-cmd:unshare -r $N/u9fs -a none -u $(id -un) $R" -device e1000,netdev=n0 \
-  > "$OUT/9front-console.log" 2>&1
-echo "qemu exit $? (console log: $OUT/9front-console.log)"
-cp "$R/p9bundle/results.txt" "$OUT/9front-results.txt" 2>/dev/null && cat "$OUT/9front-results.txt" || { echo "no results; console tail:"; tail -30 "$OUT/9front-console.log"; exit 1; }
-[ "$(cat "$R/p9bundle/exitcode" 2>/dev/null)" = 0 ]
+# run_9front
+#	Phase 0.5 on real 9front.  Boot the 9front kernel diskless in
+#	QEMU with its root served from this machine by u9fs (as in the
+#	rd CI), run out/p9bundle at boot (termrc.local), power off and
+#	print the results.  Run setup_9front.sh once, p9bundle.sh first.
+#
+#	QEMU's guestfwd starts u9fs for each 9P connection, on
+#	10.0.2.100: slirp will not forward its own gateway, 10.0.2.2.
+#	u9fs chroots into the served tree, so it runs in a user
+#	namespace (unshare -r): no root, socat or port 564 on the host.
+set -uo pipefail
+. "$(dirname "$0")/../common.sh"
+
+root=$nine/root
+b=$out/p9bundle
+[ -x "$nine/u9fs" ] && [ -f "$nine/9pc64" ] && [ -d "$root/rc" ] ||
+	fatal "no 9front in $nine: run plan9/setup_9front.sh"
+[ -f "$b/run9front.rc" ] || fatal "no bundle: run plan9/p9bundle.sh"
+
+rm -rf "$root/p9bundle"
+cp -r "$b" "$root/p9bundle"
+cp "$top/plan9/termrc.local" "$root/rc/bin/termrc.local"
+
+# Use KVM when we can open /dev/kvm.  Just after being added to group
+# kvm the login session does not have the group yet: setpriv
+# --init-groups picks it up (needs sudo).
+accel=
+wrap=
+if [ -w /dev/kvm ]; then
+	accel="-enable-kvm -cpu host"
+elif id -nG "$(id -un)" | grep -qw kvm && sudo -n true 2>/dev/null; then
+	accel="-enable-kvm -cpu host"
+	wrap="sudo -n setpriv --reuid=$(id -u) --regid=$(id -g) --init-groups"
+else
+	echo "no access to /dev/kvm: emulating, this takes an hour or more" >&2
+fi
+
+fs=10.0.2.100
+u9fs="unshare -r $nine/u9fs -a none -u $(id -un) $root"
+$wrap timeout ${timeout:-7200} qemu-system-x86_64 $accel -m 2G -smp 2 -nographic -no-reboot \
+	-kernel "$nine/9pc64" \
+	-append "nobootprompt=tcp fs=$fs auth=$fs console=0 b115200 user=glenda p9test=yes" \
+	-netdev "user,id=net0,guestfwd=tcp:$fs:564-cmd:$u9fs" \
+	-device e1000,netdev=net0 \
+	>"$out/9front-console.log" 2>&1
+
+if [ ! -f "$root/p9bundle/results.txt" ]; then
+	tail -20 "$out/9front-console.log"
+	fatal "no results; console log in $out/9front-console.log"
+fi
+cp "$root/p9bundle/results.txt" "$out/9front-results.txt"
+cat "$out/9front-results.txt"
+[ "$(cat "$root/p9bundle/exitcode" 2>/dev/null)" = 0 ]

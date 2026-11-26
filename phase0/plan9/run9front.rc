@@ -1,0 +1,67 @@
+#!/bin/rc
+# run9front - run the Phase 0.5 bundle on 9front
+#	Compile each tests/*.c with the system 6c and 6l against the
+#	9front libc, run it, and compare its output and exit status
+#	with those of the native Linux build.
+#	usage: rc run9front.rc >[2=1] | tee results.txt
+#	For a dry run under goken on Linux, set cflags and ldflags.
+rfork e
+if(~ $#cflags 0)
+	cflags=()
+if(~ $#ldflags 0)
+	ldflags=()
+pass=()
+fail=()
+
+# compare name: run tests/name.out, compare with the native results
+fn compare {
+	t=tests/$1
+	./$t.out >$t.actual >[2=1]
+	st=$status
+	want=`{sed 's/^rc=//' $t.rc}
+	ok=yes
+	if(! cmp -s $t.actual $t.expected)
+		ok=no
+	if(~ $want 0 && ! ~ $st '' 0)
+		ok=no
+	if(! ~ $want 0 && ! ~ $st *$want)
+		ok=no
+	if(~ $ok yes){
+		echo $1: PASS
+		pass=($pass $1)
+	}
+	if not{
+		echo $1: MISMATCH, status $"st, native status $want
+		cmp $t.actual $t.expected
+		fail=($fail $1)
+	}
+}
+
+# check name: build tests/name.c and compare
+fn check {
+	t=tests/$1
+	if(! 6c -w $cflags -I shim -o $t.6 $t.c >$t.log >[2=1]){
+		echo $1: 6c FAILED
+		grep -v '^warning' $t.log | sed 5q
+		fail=($fail $1)
+	}
+	if not if(! 6l $ldflags -o $t.out $t.6 rt_p9.6 libc_p9.6 >$t.log >[2=1]){
+		echo $1: 6l FAILED
+		sed 5q $t.log
+		fail=($fail $1)
+	}
+	if not
+		compare $1
+}
+
+date
+6c -w $cflags rt_p9.c || exit rt_p9.c
+6c -w $cflags libc_p9.c || exit libc_p9.c
+for(f in tests/*.c)
+	check `{basename $f .c}
+echo $#pass passed, $#fail failed
+if(! ~ $#fail 0){
+	echo failed: $fail
+	exit fail
+}
+exit ''

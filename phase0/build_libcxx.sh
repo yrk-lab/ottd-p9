@@ -1,10 +1,16 @@
 #!/bin/bash
-# Compile the needed non-header parts of libc++ to LLVM IR, link them into one module.
-set -euo pipefail; . "$(dirname "$0")/common.sh"
-SRC=$W/llvm-src/libcxx/src; D=$OUT/libcxx; mkdir -p "$D"
-for f in $LIBCXX_SRCS; do
-  clang++-17 $CXXFLAGS -S -emit-llvm -D_LIBCPP_BUILDING_LIBRARY -DLIBCXX_BUILDING_LIBRARY \
-    -I"$SRC" -I"$SRC/include" "$SRC/$f.cpp" -o "$D/$(basename $f).ll"
+# build_libcxx
+#	Compile the parts of libc++ that are not header-only to LLVM IR
+#	and link them into one module, out/libcxx_min.ll.
+set -euo pipefail
+. "$(dirname "$0")/common.sh"
+
+src=$work/llvm-src/libcxx/src
+d=$out/libcxx
+mkdir -p "$d"
+for f in $libcxxsrcs; do
+	clang++-17 $cxxflags -S -emit-llvm -D_LIBCPP_BUILDING_LIBRARY -DLIBCXX_BUILDING_LIBRARY \
+		-I"$src" -I"$src/include" "$src/$f.cpp" -o "$d/$(basename "$f").ll"
 done
-llvm-link "$D"/*.ll -S -o "$OUT/libcxx_min.ll"
-echo "libcxx_min.ll: $(wc -c < "$OUT/libcxx_min.ll") bytes"
+llvm-link "$d"/*.ll -S -o "$out/libcxx_min.ll"
+echo "libcxx_min.ll: $(wc -c <"$out/libcxx_min.ll") bytes"

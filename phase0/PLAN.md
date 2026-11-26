@@ -38,15 +38,15 @@ C regression tests (tests/c/*) and 24 CompCert benchmark programs (benchs/compce
 Caveat: goken forks an older compiler without many 9front fixes, so goken passing is the fast loop, not the truth. **Real 9front 6c is the gate.**
 - Fast loop (Linux): `plan9/setup_goken.sh` then `plan9/run_p9.sh` (clang -> IR -> cbe `-cbe-explicit-padding` -> `lower.py` -> 6c -> 6l + goken libc -> run -> diff vs native).
 - Truth (your machine): `plan9/p9bundle.sh` collects lowered C + shims; copy `out/p9bundle/` into a 9front VM and run `rc run9front.rc` (untested script).
-- C corpus: `plan9/run_compcert.sh` (goken's 24 CompCert benchmarks, ISO C) through `plan9/p9check_c.sh`: clang (C) -> IR -> cbe -> `lower.py --libc`
+- C corpus: `plan9/run_compcert.sh` (goken's 24 CompCert benchmarks, ISO C) through `plan9/p9check.sh` (one script for .cpp and .c): clang (C) -> IR -> cbe -> `lower.py --libc`
   -> 6c -> 6l + `plan9/libc_p9.c` + goken libc; output must equal native clang *and* the reference `Results/` file.
 Status (2026-11-26, user's WSL, Ubuntu 26.04): all 8 C++ tests identical to native through goken 6c; CompCert 23/24. The 24th, binarytrees, matches
 native up to depth 12 and then exhausts goken's 64 MB never-freeing bump malloc (a goken libc limit, not the pipeline). goken's own `tests/c` (`mk test`,
 all arches under qemu-user) passes, i.e. the 6c we test against is healthy. tests/c is Plan 9-dialect compiler-bug repros, so it is a 6c check,
 not a translator check.
 9front (release 11952, diskless boot with root over u9fs: `plan9/setup_9front.sh` once, then `plan9/p9bundle.sh && plan9/run_9front.sh`):
-**all 8 C++ tests fail.** The C++ path still maps printf to print, and the tests use `%u`, a flag rather than a verb on 9front; returning
-from main exits with status "main". Fix: route C++ through `libc_p9.c` too. C corpus on 9front: run in progress. See `words` section 11.
+**PASS 32/32 (8 C++ tests + 24 CompCert, binarytrees included), 3.5 minutes with KVM. Phase 0.5 gate passed on real 9front.**
+Getting there needed C++ to use `libc_p9.c` too: the earlier printf->print mapping worked on goken only (`%u`: a verb in goken, a flag in 9front).
 
 ### What kencc needed (all mechanical, all now scripted)
 - No stdint.h, #if, __attribute__, function-type typedefs, `##`, __builtin_*: handled by `plan9/lower.py` + `plan9/shim/` (to become a dialect switch inside llvm-cbe).
@@ -54,7 +54,7 @@ from main exits with status "main". Fix: route C++ through `libc_p9.c` too. C co
   and wraps *every* record, including the `l_array_N_T` wrapper structs, in `#pragma pack on/off` (in this kencc `pack on` = true packing). Missing the array wrappers made
   `[4 x i8]` tail padding 8 bytes and vector<Item> grew to the wrong capacity: found by bisecting with single-feature tests (tests_p9/m1-m5).
 - 64-bit literals: emit `...ull`/`...ll` directly. 6c warns `truncated constant` for pasted forms.
-- Plan 9 libc differences (printf->print, no %zu, bcmp, ceilf) live in `plan9/rt_p9.c` (C++ tests).
+- C++ runtime (new/delete, pure virtual, libc++ abort) is `plan9/rt_p9.c`; every test links it and `plan9/libc_p9.c`.
 - **libc ABI:** the IR is x86_64 Linux (LP64), but on Plan 9 amd64 `long` is 32 bit, so Plan 9's strtol/atol etc. return the wrong width and `%ld`
   prints 32 bits. Plan 9 has no printf/FILE, and integer verbs differ between libcs (`%x` is signed; `u` is a flag in 9front but a verb in goken).
   `lower.py --libc` renames ISO C stdio/long-returning names to `c_*`, implemented in `plan9/libc_p9.c` on Plan 9 libc only (own integer
