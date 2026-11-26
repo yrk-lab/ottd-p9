@@ -9,7 +9,7 @@ same number of ticks, give byte-identical saves with the stock build.
 ./setup.sh              # once: clone the tag, export src-ref (no .git, shared .ottdrev), OpenGFX
 ./build_ref.sh          # stock reference build (system gcc, libstdc++): work/build-ref/openttd
 ./prep.sh               # src-p9 = src-ref + patches/series
-./build_p9.sh           # clang 17 + libc++, exceptions and RTTI on: work/build-p9/openttd
+./build_p9.sh           # clang 17 + libc++, exceptions and RTTI on, no threads: work/build-p9/openttd
 ./gate.sh run work/build-ref/openttd ref
 ./gate.sh run work/build-p9/openttd p9
 ./gate.sh cmp ref p9
@@ -29,5 +29,11 @@ two builds be.
 Both source trees are exported without `.git` and share one `.ottdrev`, so the stock and patched
 builds carry the same version string (it is recorded in the save's game log).
 
-Status 2026-11-26: clang 17 + libc++ gives saves byte-identical to stock gcc + libstdc++ (both scenarios). Host tools
-(strgen, settingsgen) come from the reference build via `HOST_BINARY_DIR`. Next: threads, then translating the build.
+Threads: `nothreads.c`, linked into build-p9, makes `pthread_create` fail, as the Plan 9 runtime will. libc++'s
+`std::thread` then throws `std::system_error`, which OpenTTD's `StartNewThread` catches, and its callers run the work
+inline. No OpenTTD patch is needed. (`-d misc=1` shows "Can't create thread 'ottd:linkgraph'" and "'ottd:savegame'".)
+
+Status 2026-11-26: clang 17 + libc++, exceptions and RTTI on, no threads, gives saves byte-identical to stock gcc +
+libstdc++ with threads (both scenarios). Host tools (strgen, settingsgen) come from the reference build via
+`HOST_BINARY_DIR`. `patches/series` is still empty. Next: std::filesystem and other OS dependencies, then translating
+the build.

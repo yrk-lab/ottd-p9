@@ -284,3 +284,17 @@ Next steps now (replace section 10's first two items):
 - Next: Phase 1 continues with exceptions ON: threads (libc++ without threads; OpenTTD's StartNewThread may fail ->
   callers run inline), std::filesystem, then translate the OpenTTD build itself (whole-program IR, EH lowering, cbe).
   Perf of a setjmp per invoke is unmeasured.
+
+=== 14. EXCEPTIONS MANDATORY; THREADS WITHOUT PATCHES (2026-11-26) ===
+- Commit 066021a: EH no longer optional. phase0/common.sh cxxflags have exceptions+RTTI; lowereh() shared; one IR library
+  out/libcxx.ll (build_libcxx.sh; libc++ srcs now include variant, optional); run_eh.sh, tests_eh/, tests_negative/ gone;
+  tests/ = t1-t3 + e1-e5; p9check.sh has no -E (C++ always lowered, C never). mkinvoke.py now mangles quoted IR names like
+  cbe (CBEMangle: non-alnum -> _XY_) and emits packed C structs for literal struct returns ({ptr, i8} in t3_stl).
+  Results: phase 0 8/8 gcc, goken 13/13, CompCert 23/24, real 9front 37/37.
+- Gotcha: editing a bash script while it runs breaks the running instance (bash reads incrementally).
+- Threads: OpenTTD needs NO patch. phase1/nothreads.c (linked into build-p9 via CMAKE_EXE_LINKER_FLAGS) makes
+  pthread_create return EAGAIN -> std::thread throws std::system_error -> StartNewThread catches -> callers inline
+  (17 linkgraph jobs in 3000 ticks, exit save). Gate: identical to stock (gcc, libstdc++, threads) in both scenarios.
+  Plan 9 runtime needs: failing pthread_create, no-op pthread mutex/cond, the EH path for system_error.
+  Risk not covered by the gate: network_server.cpp condition_variable (save streaming to joining clients).
+- Next: std::filesystem (9 files) and other OS dependencies of the dedicated build; then translate OpenTTD itself.

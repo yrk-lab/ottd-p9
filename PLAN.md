@@ -36,7 +36,10 @@ comes with libc++abi's typeinfo code, which the exception runtime needs anyway.
 0. **Feasibility** (toy C++ incl. STL through the pipeline, run on Linux). Gate: outputs identical to native build. *(this harness)*
 1. **Dedicated server, no graphics.** `OPTION_DEDICATED=ON`, no threads, no ICU/harfbuzz/freetype/fontconfig/curl/SDL/fluidsynth.
    Build zlib + liblzma yourself; libc++ without threads/localization/filesystem (patch OpenTTD's `std::filesystem` use).
-   Exceptions and RTTI stay (see Pipeline). Gate (`phase1/gate.sh`): the same savegames, run the same number of ticks,
+   Exceptions and RTTI stay (see Pipeline). **Threads: no OpenTTD patch.** The runtime's `pthread_create` fails;
+   libc++'s `std::thread` throws `std::system_error`, OpenTTD's `StartNewThread` catches it and every caller runs the
+   work inline (link graph jobs, saving, the game loop); mutexes stay and become no-ops in a single-threaded runtime.
+   On Linux `phase1/nothreads.c` does the same; the gate is identical with it (2026-11-26). Gate (`phase1/gate.sh`): the same savegames, run the same number of ticks,
    give byte-identical saves vs the stock upstream build. OpenTTD 15.3; clang 17 + libc++ already matches stock gcc.
 2. **Compile the C on Plan 9.** Primary path (proven small by Phase 0.5): a Plan 9 dialect mode in llvm-cbe (what `lower.py` does today + explicit padding)
    + symbol-name hashing. Old gcc under APE is only a fallback. Gate: dedicated server runs natively on 9front amd64 (QEMU).
