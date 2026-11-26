@@ -1,0 +1,179 @@
+HANDOFF: OpenTTD for Plan 9 via C++ -> C translation
+Written 2026-11-26 for another model/agent (e.g. Claude Code) to resume the work.
+Everything below is what was established in the session; "UNVERIFIED" marks what was not.
+
+=== 1. GOAL (from the user) ===
+Run OpenTTD (https://github.com/OpenTTD/OpenTTD) on Plan 9 (target: 9front amd64).
+Blocker: OpenTTD is C++20; Plan 9 only has C (kencc: 6c/8c/...) and Go compilers.
+Requirement: a translator/pipeline so that future upstream changes are adopted by re-running
+scripts, not by hand-porting. Preference order the user gave: (1) modern C++-to-C translator,
+(2) cfront (a Plan 9 port exists via links under 9p.io), (3) C++-to-Go if decent.
+The user wants early, concrete confirmation (gates) before big investment.
+
+=== 2. USER ENVIRONMENT ===
+- Windows + WSL2 Ubuntu 24.04. Prompt seen: yrk@levo470:~/ottd-p9/phase0$
+- Has plan9port; earlier projects: yrk-lab/rd (RDP client), a plan9 paint program template.
+- Has CMake 4.x (newer than Ubuntu's apt 3.28). Can run a 9front VM in QEMU.
+- Timezone Europe/Dublin. Communicates tersely ("Continue").
+
+=== 3. DECISIONS AND WHY ===
+- cfront: dead end. OpenTTD needs C++20 (required since 14.0); cfront is ~C++2.x/3.0
+  (no full templates/STL/lambdas).
+- No maintained modern C++-to-C *source* translator exists (as far as found).
+- C++-to-Go: not realistic for this code base; also Go's Plan 9 port is "experimental" and
+  whether Go draw libs work on native Plan 9 (vs p9p's devdraw) was NOT verified.
+- CHOSEN pipeline: clang -> LLVM IR -> llvm-cbe -> C -> Plan 9 C compiler.
+    OpenTTD tag -> clang++ (C++20, -fno-exceptions -fno-rtti, fixed triple)
+      -> per-TU IR (+ libc++ built to IR) -> llvm-link + internalize/globaldce
+      -> llvm-cbe (patched) -> lowering to Plan 9 C dialect -> 6c/6l (mk on Plan 9)
+- Plan B (not tried): clang -> freestanding x86-64 objects -> lld at Plan 9 load addresses
+  -> a.out wrapper + syscall/ABI shim. More robust, but not a translator.
+- Exceptions are disabled (-fno-exceptions makes try/catch a hard clang error, which is
+  deliberate: cbe's LowerInvokePass would otherwise silently drop handlers).
+
+=== 4. PHASE PLAN ===
+0.   Feasibility: toy C++ (classes/templates/lambdas/STL, libc++ itself translated) through
+     the pipeline, output identical to native build.          -> DONE, PASSED (also on user's machine)
+0.5  Plan 9 compiler acceptance (added this session).          -> PASSED on goken 6c (Linux); 9front PENDING
+1.   OpenTTD dedicated server, no graphics: OPTION_DEDICATED=ON, no threads, no
+     ICU/harfbuzz/freetype/fontconfig/curl/SDL/fluidsynth. Build zlib + liblzma (C). libc++ without
+     threads/localization/filesystem. Patch series for exception sites + std::filesystem.
+     Do it natively with clang first; then through the translator. Gate: loads a savegame, ticks
+     N days, checksums identical to a stock upstream build. -> NOT STARTED
+2.   Compile the C on real Plan 9 (9front amd64 in QEMU). Primary path: Plan 9 dialect mode inside
+     llvm-cbe + symbol-name hashing. Old gcc under APE is only a fallback.
+3.   Video driver: src/video/plan9_v.cpp (translated C++) + small hand-written C shim on libdraw
+     (initdraw, loadimage, mouse/keyboard, eresized). Start split-process (game under APE, native
+     frontend over a pipe), merge later. Built-in sprite font, null sound, 32bpp-optimized
+     blitter, OpenGFX base set.
+4.   Upstream-tracking CI: bump tag, regenerate C, build, rerun Phase 1 savegame check.
+
+=== 5. WHAT EXISTS (artifacts) ===
+Delivered to the user as /mnt/user-data/outputs/{openttd-plan9-phase0.tar.gz, PLAN.md, README.md}.
+IMPORTANT: the sandbox filesystem was reset once mid-session. Only the tarball persists. Extract it
+to get everything:  tar xzf openttd-plan9-phase0.tar.gz   (creates phase0/)
+
+phase0/
+  setup.sh            apt packages (clang-17 llvm-17-dev libc++-17-dev libc++abi-17-dev
+                      libunwind-17-dev cmake ninja ...), clones llvm-cbe pinned at rev 5341f88,
+                      applies patches/llvm-cbe-phase0.patch, builds it, sparse-clones libc++ 17.0.6.
+  common.sh           shared flags: --target=x86_64-unknown-linux-gnu -std=c++20 -stdlib=libc++
+                      -fno-exceptions -fno-rtti -O1 -g0 -D_LIBCPP_DISABLE_EXTERN_TEMPLATE
+  build_libcxx.sh     compiles libc++ non-header parts to IR: string hash charconv algorithm memory
+                      ryu/d2fixed ryu/d2s ryu/f2s; llvm-link into out/libcxx_min.ll
+  run_phase0.sh       Phase 0 gate (has a preflight that checks plain clang++/libc++ links)
+  rt.c                C++ runtime shim for Linux/gcc (operator new/delete, __cxa_pure_virtual,
+                      atexit, atomics fallback, std::exception stubs, libc++ verbose_abort)
+  audit.py            dialect/identifier statistics of translator output
+  tests/              t1_c_like, t2_classes, t3_stl (t3 uses %u, not %zu)
+  tests_negative/     neg_exceptions.cpp (must fail at clang)
+  tests_p9/           m1..m5 single-feature bisect tests (vector<int>, vector<struct>, to_string, hash, trace)
+  patches/llvm-cbe-phase0.patch   all llvm-cbe fixes (see section 6)
+  plan9/
+    lower.py          cbe C -> C that kencc 6c accepts (probe-grade; long-term home is a cbe dialect switch)
+    shim/stdint.h, shim/math.h
+    rt_p9.c           runtime shim against Plan 9 libc (_Znwm etc., bcmp, ceilf, verbose_abort)
+    p9check.sh        one test: clang->IR->prune->cbe(-cbe-explicit-padding)->lower.py->6c->6l(goken libc)->run->diff
+    run_p9.sh         all tests;  setup_goken.sh builds goken9cc + libc (~10 min)
+    p9bundle.sh       collects lowered C + shims into out/p9bundle/ with run9front.rc (UNTESTED rc script)
+Typical env:  W=<phase0>/work  G=<goken9cc dir>
+
+=== 6. FINDINGS (technical, verified unless marked) ===
+llvm-cbe
+- master needs LLVM 22 (it moved to LLVM 20 in Nov 2025); pinned rev 5341f88 works with LLVM 17.
+  Its CMakeLists declares cmake_minimum_required 3.4.3 -> CMake>=4 errors; setup.sh passes
+  -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -Wno-dev and wipes the build dir before configuring.
+- Bugs fixed in the patch: (a) llvm.fshl/fshr unsupported (libc++ string hash uses rotates);
+  (b) crash on Itanium ctor/dtor aliases (C1->C2): alignment query on a function type;
+  (c) forward prototypes of internal functions lacked `static`;
+  (d) NEW option -cbe-explicit-padding: emits each struct padding gap as explicit uint8_t array
+      and wraps EVERY record, including the l_array_N_T array-wrapper structs, in
+      #pragma pack on / pack off.
+- Output facts: GNU-isms everywhere (__attribute__, __forceinline, __builtin_*, C99 stdint types,
+  alignment macros); mangled identifiers up to 398 chars (6 over 255, 75 over 28) -> a symbol
+  hashing pass is REQUIRED for Plan 9 linkers; a ~40-line program becomes ~11k lines C because
+  libc++ templates instantiate -> link all TUs into one module and run globaldce BEFORE cbe.
+- Run llvm-link then `opt -passes=internalize,globaldce --internalize-public-api-list=main`.
+
+kencc / Plan 9 C compiler behaviour (goken9cc 6c; real 9front 6c UNVERIFIED)
+- No stdint.h, #if, __attribute__, function-type typedefs, ## token pasting, __builtin_*.
+  lower.py handles: strips #if blocks/#includes in the preamble, balanced-paren removal of
+  __ATTRIBUTELIST__/__attribute__/__*ALIGN__ macros, strips __forceinline/__noreturn/static inline,
+  rewrites `typedef R f(args)` to pointer-to-function typedefs, emits 64-bit literals as 123ull/123ll
+  (UINT64_C pasting breaks), defines __UNALIGNED_LOAD__, __builtin_unreachable/trap -> abort().
+- 6c rounds every struct/union up to a multiple of the word (8 bytes on amd64) -> LLVM byte offsets
+  break. In this kencc `#pragma pack on` is true packing (`pack 1` did NOT work).
+- The t3 bug (vector<Item> capacity 10 instead of 8, size 22 instead of 20): the [4 x i8] tail-padding
+  wrapper struct was outside pack-on, so 6c made it 8 bytes and Item 36 instead of 32. Fixed in cbe.
+- Plan 9 libc differences: printf->print (lower step uses a perl s/printf/print/), no %zu,
+  LLVM turns memcmp==0 into bcmp, ceilf missing; handled in rt_p9.c.
+- Linking with goken: 6l -L $G/ROOT/arch/amd64/lib -H7 -E _main -o t.exe x.6 rt_p9.6 -lc
+- 7 integer helper functions (add/sub/lshr/ashr/and/umax) agree between gcc and 6c over ~1,100 input pairs each.
+- RISK: goken 6c was killed (likely OOM, exit 137) on one ~4,000-statement straight-line function
+  (a test artifact; splitting fixed it). Watch 6c memory on OpenTTD's large functions.
+
+Test-suite research (what the user asked about)
+- No standalone C-compiler test suite maintained by Charles Forsyth was found. His compiler lineage:
+  ken-cc (code.google.com) -> aryx/fork-kencc -> aryx/goken9cc (2010 Go tree snapshot kept in GO/).
+  The 2010 Go repo bundled the C toolchain; its test/ dir tests Go, not C.
+- goken9cc (https://github.com/aryx/goken9cc) has tests/c/* (~200 small regression tests with expected
+  output: vlong, float, variants, regressions, mini*, hello_libc) and benchs/compcert (24 ISO C
+  programs: aes sha1 sha3 fft nbody mandelbrot qsort ...). Good next acceptance corpus.
+  Build: ./configure; ./scripts/build-mk.sh; ./scripts/promote-mk.sh; . ./env.sh; objtype=amd64 mk; mk install;
+  (cd lib_core/libc && mk objtype=amd64 cputype=amd64 install). Also tamnd/rucc (Rust C compiler with a
+  kencc driver) exists but was not evaluated.
+- CAVEAT (TUHS post, Sep 2026, a 9front developer): goken starts from an older compiler fork without many
+  9front fixes (e.g. a packed-struct copy bug that broke a ported game). goken passing = fast loop only;
+  real 9front 6c is the truth.
+
+OpenTTD source survey (HEAD 871c4f4 dated 2026-11-25; 566 .cpp files, ~478k lines incl. 3rdparty)
+Approximate, from grep surveys:
+- Exceptions: widget.cpp throws are assertion-style std::runtime_error (-> fatal-error call);
+  saveload.cpp uses throw/catch(...) as non-local exit in ~5 places plus SlErrorCorrupt (-> setjmp/longjmp,
+  skipped destructors only leak on error paths); script engine (script_instance.cpp, Squirrel glue) is the
+  biggest cluster -> stub scripting out for the first milestone. Others: genworld.cpp, console.cpp,
+  newgrf.cpp, strings.cpp, network_content.cpp, crashlog.cpp, etc. (some are Windows/strgen-only).
+- std::filesystem in ~10 files: fios.cpp, ini.cpp, strings.cpp, openttd.cpp, os/unix/unix.cpp, ... ->
+  small POSIX replacement.
+- Threads: saveload.cpp, palette.cpp, network code -> check the build option covers them.
+
+=== 7. VERIFIED RESULTS ===
+- Phase 0 (gcc as stand-in C compiler): t1/t2/t3 byte-identical to native. Re-run by the user on WSL:
+  PASS 3/3 with identical line counts (126 / 325 / 11,040 C lines) -> translation deterministic across machines.
+- Phase 0.5 on goken 6c (sandbox): 8/8 identical to native (t1,t2,t3,m1..m5), including the 11k-line STL program.
+
+=== 8. NOT VERIFIED / OPEN ===
+- Real 9front 6c on any of this (user was asked to run p9bundle.sh and `rc run9front.rc` in a 9front VM
+  and report results; run9front.rc is untested).
+- Anything at OpenTTD scale: translation of OpenTTD itself, cbe robustness on large C++, 6c memory/time,
+  explicit padding + pack on at scale (fallback idea: flat-memory mode where every struct is a byte blob
+  accessed via typed pointer casts).
+- Exceptions (disabled), threads, std::filesystem, floating-point printing paths, 32-bit, optimisation
+  levels other than -O1.
+- Plan 9 libc/APE with libc++ (libc++ assumes a fairly complete POSIX libc; the plan was "APE-first").
+- FPU exceptions: Plan 9 enables them by default; mask early in main.
+- Go draw libs on native Plan 9.
+
+=== 9. GOTCHAS / TOOLING QUIRKS ===
+- The user's first failure was CMake 4 (see above); second was missing libunwind-17-dev (libc++ link).
+- goken's bin/ on PATH shadows system tools: its `sed` has no -i, its `tar` etc. Use python for edits or
+  /usr/bin/ paths when goken's PATH is active.
+- /bin/sh is dash here: process substitution <(...) fails -> use bash -c / #!/bin/bash.
+- apt lock contention if two apt-get run in parallel.
+- common.sh sets HERE; scripts sourcing it must not reuse the name (p9check.sh uses P).
+- tests must avoid %zu (Plan 9 print lacks it); cast to unsigned and use %u.
+- Be careful: WebFetch of github.com/<repo>/tree/... is robots-blocked; clone with git in the sandbox instead.
+
+=== 10. SUGGESTED NEXT STEPS (in order) ===
+1. Get the 9front result (user runs plan9/p9bundle.sh -> rc run9front.rc). If 9front 6c disagrees with
+   goken, bisect with the m1..m5 style single-feature tests and fix in cbe/lower.py.
+2. Run the CompCert benchmarks and goken tests/c through the pipeline (C is already C, so this mainly tests
+   lowering + 6c); then add them to run_p9.sh.
+3. Phase 1a: build OpenTTD natively with clang -fno-exceptions, dedicated, no threads/ICU/etc., as a patch
+   series kept as files (quilt/git format-patch) so upstream bumps are cheap; rewrite widget.cpp throws,
+   saveload exception paths (setjmp/longjmp), stub scripting, replace std::filesystem. Gate: savegame load +
+   N ticks with checksums equal to a stock build.
+4. Then translate it (whole-program link + globaldce first), fix cbe/lower gaps, add symbol hashing, move
+   lower.py rules into a cbe dialect switch.
+5. Phase 2 on 9front QEMU, Phase 3 libdraw video driver (split-process first), Phase 4 CI.
+Keep PLAN.md in the tarball updated as the source of truth.

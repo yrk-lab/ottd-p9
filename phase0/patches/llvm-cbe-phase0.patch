@@ -1,8 +1,87 @@
 diff --git a/lib/Target/CBackend/CBackend.cpp b/lib/Target/CBackend/CBackend.cpp
-index 8d57096..70b6e3c 100644
+index 8d57096..44117aa 100644
 --- a/lib/Target/CBackend/CBackend.cpp
 +++ b/lib/Target/CBackend/CBackend.cpp
-@@ -2594,6 +2594,8 @@ void CWriter::generateHeader(Module &M) {
+@@ -52,6 +52,14 @@ namespace llvm_cbe {
+ 
+ using namespace llvm;
+ 
++static cl::opt<bool> CBEExplicitPadding(
++    "cbe-explicit-padding",
++    cl::desc("Emit every struct padding gap as an explicit uint8_t array and "
++             "wrap structs in '#pragma pack on/off' (Plan 9 kencc rounds "
++             "records up to the word, which breaks LLVM-computed offsets)"),
++    cl::init(false));
++
++
+ static cl::opt<bool> DeclareLocalsLate(
+     "cbe-declare-locals-late",
+     cl::desc("C backend: Declare local variables at the point they're first "
+@@ -608,17 +616,31 @@ CWriter::printTypeName(raw_ostream &Out, Type *Ty, bool isSigned,
+   }
+ }
+ 
++
++
+ raw_ostream &CWriter::printStructDeclaration(raw_ostream &Out,
+                                              StructType *STy) {
+   if (STy->isPacked())
+     Out << "#ifdef _MSC_VER\n#pragma pack(push, 1)\n#endif\n";
++  if (CBEExplicitPadding)
++    Out << "#pragma pack on\n";
+   Out << getStructName(STy) << " {\n";
+   unsigned Idx = 0;
++  uint64_t PrevEnd = 0;
++  const StructLayout *SL =
++      CBEExplicitPadding ? TD->getStructLayout(STy) : nullptr;
+   for (StructType::element_iterator I = STy->element_begin(),
+                                     E = STy->element_end();
+        I != E; ++I, Idx++) {
+     Out << "  ";
+     bool empty = isEmptyType(*I);
++    if (CBEExplicitPadding && !empty) {
++      uint64_t Off = SL->getElementOffset(Idx);
++      if (Off > PrevEnd)
++        Out << "uint8_t pad" << utostr(Idx) << "[" << utostr(Off - PrevEnd)
++            << "];\n  ";
++      PrevEnd = Off + TD->getTypeAllocSize(*I);
++    }
+     if (empty)
+       Out << "/* "; // skip zero-sized types
+     printTypeName(Out, *I, false) << " field" << utostr(Idx);
+@@ -627,10 +649,15 @@ raw_ostream &CWriter::printStructDeclaration(raw_ostream &Out,
+     else
+       Out << ";\n";
+   }
++  if (CBEExplicitPadding && SL->getSizeInBytes() > PrevEnd)
++    Out << "  uint8_t padtail[" << utostr(SL->getSizeInBytes() - PrevEnd)
++        << "];\n";
+   Out << '}';
+   if (STy->isPacked())
+     Out << " __attribute__ ((packed))";
+   Out << ";\n";
++  if (CBEExplicitPadding)
++    Out << "#pragma pack off\n";
+   if (STy->isPacked())
+     Out << "#ifdef _MSC_VER\n#pragma pack(pop)\n#endif\n";
+   return Out;
+@@ -895,9 +922,15 @@ raw_ostream &CWriter::printArrayDeclaration(raw_ostream &Out, ArrayType *ATy) {
+   cwriter_assert(!isEmptyType(ATy));
+   // Arrays are wrapped in structs to allow them to have normal
+   // value semantics (avoiding the array "decay").
++  // With -cbe-explicit-padding every record is packed so that kencc does not
++  // round it up to the word: a [4 x i8] wrapper must stay 4 bytes, not 8.
++  if (CBEExplicitPadding)
++    Out << "#pragma pack on\n";
+   Out << getArrayName(ATy) << " {\n  ";
+   printTypeName(Out, ATy->getElementType());
+   Out << " array[" << utostr(ATy->getNumElements()) << "];\n};\n";
++  if (CBEExplicitPadding)
++    Out << "#pragma pack off\n";
+   return Out;
+ }
+ 
+@@ -2594,6 +2627,8 @@ void CWriter::generateHeader(Module &M) {
        case Intrinsic::ssub_sat:
        case Intrinsic::sshl_sat:
        case Intrinsic::ushl_sat:
@@ -11,7 +90,7 @@ index 8d57096..70b6e3c 100644
        case Intrinsic::bswap:
        case Intrinsic::ceil:
        case Intrinsic::ctlz:
-@@ -2714,8 +2716,11 @@ void CWriter::generateHeader(Module &M) {
+@@ -2714,8 +2749,11 @@ void CWriter::generateHeader(Module &M) {
  
        Type *ElTy = I->getValueType();
        unsigned Alignment = I->getAliaseeObject()->getAlignment();
@@ -24,7 +103,7 @@ index 8d57096..70b6e3c 100644
        if (IsOveraligned) {
          headerUseAligns();
          Out << "__PREFIXALIGN__(" << Alignment << ") ";
-@@ -3628,6 +3633,8 @@ void CWriter::printModuleTypes(raw_ostream &Out) {
+@@ -3628,6 +3666,8 @@ void CWriter::printModuleTypes(raw_ostream &Out) {
    // Emit them now, before the function that uses them is emitted
    for (auto &F : prototypesToGen) {
      Out << '\n';
@@ -33,7 +112,7 @@ index 8d57096..70b6e3c 100644
      printFunctionProto(Out, F, GetValueName(F));
      Out << ";\n";
    }
-@@ -4730,6 +4737,18 @@ void CWriter::printIntrinsicDefinition(FunctionType *funT, unsigned Opcode,
+@@ -4730,6 +4770,18 @@ void CWriter::printIntrinsicDefinition(FunctionType *funT, unsigned Opcode,
        Out << " : r;\n";
        break;
  
@@ -52,7 +131,7 @@ index 8d57096..70b6e3c 100644
      case Intrinsic::bswap:
        cwriter_assert(retT == elemT);
        cwriter_assert(!isa<VectorType>(retT));
-@@ -4903,6 +4922,8 @@ bool CWriter::lowerIntrinsics(Function &F) {
+@@ -4903,6 +4955,8 @@ bool CWriter::lowerIntrinsics(Function &F) {
            case Intrinsic::ssub_sat:
            case Intrinsic::ushl_sat:
            case Intrinsic::sshl_sat:
@@ -61,7 +140,7 @@ index 8d57096..70b6e3c 100644
            case Intrinsic::bswap:
            case Intrinsic::ceil:
            case Intrinsic::ctlz:
-@@ -5245,6 +5266,8 @@ bool CWriter::visitBuiltinCall(CallInst &I, Intrinsic::ID ID) {
+@@ -5245,6 +5299,8 @@ bool CWriter::visitBuiltinCall(CallInst &I, Intrinsic::ID ID) {
    case Intrinsic::usub_with_overflow:
    case Intrinsic::umul_with_overflow:
    case Intrinsic::smul_with_overflow:

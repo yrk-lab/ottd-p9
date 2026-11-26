@@ -29,6 +29,7 @@ int main() {
 	std::variant<int, std::string> var = std::string("variant");
 	auto up = std::make_unique<Item>(Item{"uniq", 9});
 	std::string_view sv = up->name;
-	printf("t3 %u n=%zu sum=%d opt=%d var=%zu sv=%zu\n", h, v.size(), sum(arr), o.value_or(-1), std::get<std::string>(var).size(), sv.size());
+	printf("t3 %u n=%u sum=%d opt=%d var=%u sv=%u\n", h, (unsigned)v.size(), sum(arr), o.value_or(-1),
+	       (unsigned)std::get<std::string>(var).size(), (unsigned)sv.size());
 	return 0;
 }

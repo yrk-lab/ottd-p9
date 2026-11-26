@@ -41,3 +41,11 @@ Also: llvm-cbe master now needs LLVM 22; setup pins rev 5341f88 (last before LLV
   32-bit targets, optimisation levels other than -O1, and scale (OpenTTD is ~hundreds of thousands of lines).
 - gcc stands in for the Plan 9 C compiler: nothing here shows 6c/8c/pcc or Plan 9 libc accepting the output.
 - The runtime shim uses Linux libc; Plan 9/APE equivalents come in Phase 2.
+
+## Phase 0.5 (Plan 9 compiler acceptance)
+```
+plan9/setup_goken.sh      # builds goken9cc (kencc hosted on Linux) + Plan 9-style libc.a  (~10 min)
+plan9/run_p9.sh           # all tests through 6c; output must equal the native build
+plan9/p9bundle.sh         # lowered C + shims for a run on real 9front: out/p9bundle/run9front.rc (untested)
+```
+Result in my sandbox: 8/8 identical (t1-t3, m1-m5). See PLAN.md for what 6c needed and the cbe patch (`-cbe-explicit-padding`).
