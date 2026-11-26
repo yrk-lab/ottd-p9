@@ -183,7 +183,7 @@ Approximate, from grep surveys:
 4. Then translate it (whole-program link + globaldce first), fix cbe/lower gaps, add symbol hashing, move
    lower.py rules into a cbe dialect switch.
 5. Phase 2 on 9front QEMU, Phase 3 libdraw video driver (split-process first), Phase 4 CI.
-Keep PLAN.md in the tarball updated as the source of truth.
+Keep PLAN.md (top level, the only copy) updated as the source of truth.
 
 === 11. SESSION 2 (2026-11-26, Claude Code, user's WSL) ===
 Commits: e0ca268 "Phase 0.5" (state as handed off). The work below is the commit after it.

@@ -54,4 +54,4 @@ plan9/run_9front.sh       # boot 9front diskless in QEMU, run the bundle, print 
 ```
 Settings (`common.sh`) can be overridden from the environment: `work out cbe goken nine triple`.
 Result on the user's WSL (2026-11-26): goken C++ 8/8, CompCert 23/24 (binarytrees: goken's never-freeing malloc);
-**real 9front 32/32**. See PLAN.md for what 6c and the Plan 9 libc needed.
+**real 9front 32/32**. See ../PLAN.md for what 6c and the Plan 9 libc needed.
