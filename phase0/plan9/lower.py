@@ -3,6 +3,10 @@
 Everything here is mechanical; the long-term home for these rules is a dialect switch inside llvm-cbe."""
 import re, sys
 s = sys.stdin.read()
+LIBC = "--libc" in sys.argv[1:]   # translated ISO C program: route libc references through libc_p9.c
+# ISO C names whose Plan 9 counterparts are missing or have a different ABI (long = 32 bit on Plan 9 amd64)
+RENAMED = """printf fprintf vprintf vfprintf putc fputc putchar fputs puts fwrite fflush fopen fclose getc fgetc
+getchar fgets perror strtol strtoul atol labs strlen exit stdin stdout stderr main""".split()
 
 # 1. Preamble: 6c has no #if. Drop every #if..#endif block and all #includes; keep helper function definitions.
 m = re.search(r"/\* Provide Declarations \*/(.*?)/\* Global Declarations \*/", s, flags=re.S)
@@ -38,6 +42,8 @@ s = re.sub(r"\b(l_fptr_\d+)\s*\*", r"\1 ", s)
 s = re.sub(r"\bUINT64_C\(\s*(\d+)\s*\)", r"\1ull", s)
 s = re.sub(r"\bINT64_C\(\s*(-?\d+)\s*\)", lambda m: m.group(1) + "ll", s)
 
+if LIBC:
+    s = re.sub(r"\b(" + "|".join(RENAMED) + r")\b", r"c_\1", s)
 sys.stdout.write("#include <stdint.h>\n#include <math.h>\ntypedef unsigned char bool;\n"
                  "#define __UNALIGNED_LOAD__(type, align, op) (*(type*)(op))\n"
-                 "void abort(void);\n#define __builtin_unreachable() abort()\n#define __builtin_trap() abort()\n" + s)
+                 "void abort(void);\n#define __builtin_unreachable() for(;;) abort()\n#define __builtin_trap() abort()\n" + s)

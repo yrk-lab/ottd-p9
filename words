@@ -1,5 +1,6 @@
 HANDOFF: OpenTTD for Plan 9 via C++ -> C translation
 Written 2026-11-26 for another model/agent (e.g. Claude Code) to resume the work.
+Updated 2026-11-26 (session 2, Claude Code on the user's WSL): see section 11; it supersedes older statements where they differ.
 Everything below is what was established in the session; "UNVERIFIED" marks what was not.
 
 === 1. GOAL (from the user) ===
@@ -14,6 +15,11 @@ The user wants early, concrete confirmation (gates) before big investment.
 - Windows + WSL2 Ubuntu 24.04. Prompt seen: yrk@levo470:~/ottd-p9/phase0$
 - Has plan9port; earlier projects: yrk-lab/rd (RDP client), a plan9 paint program template.
 - Has CMake 4.x (newer than Ubuntu's apt 3.28). Can run a 9front VM in QEMU.
+- Session 2 facts: the WSL distro is actually Ubuntu 26.04.1 ("resolute"), not 24.04. Passwordless sudo is configured
+  (/etc/sudoers.d/90-yrk-nopasswd). /dev/kvm exists (nested virt on) but is root:kvm 0660 and the user was NOT yet in group
+  kvm at the end of session 2 (told: sudo usermod -aG kvm $USER, then wsl --shutdown or newgrp kvm).
+- Repo: git@github.com:yrk-lab/ottd-p9.git (branch main). Everything is in git now; the tarball/sandbox notes in section 5 are history.
+- The user prefers Plan 9 style for Plan 9 C (style(6), existing libc code) and suggested u9fs + QEMU like the CI of their rd project.
 - Timezone Europe/Dublin. Communicates tersely ("Continue").
 
 === 3. DECISIONS AND WHY ===
@@ -34,7 +40,7 @@ The user wants early, concrete confirmation (gates) before big investment.
 === 4. PHASE PLAN ===
 0.   Feasibility: toy C++ (classes/templates/lambdas/STL, libc++ itself translated) through
      the pipeline, output identical to native build.          -> DONE, PASSED (also on user's machine)
-0.5  Plan 9 compiler acceptance (added this session).          -> PASSED on goken 6c (Linux); 9front PENDING
+0.5  Plan 9 compiler acceptance (added this session).          -> PASSED on goken 6c (Linux); 9front FAILS (C++ tests, see 11)
 1.   OpenTTD dedicated server, no graphics: OPTION_DEDICATED=ON, no threads, no
      ICU/harfbuzz/freetype/fontconfig/curl/SDL/fluidsynth. Build zlib + liblzma (C). libc++ without
      threads/localization/filesystem. Patch series for exception sites + std::filesystem.
@@ -177,3 +183,62 @@ Approximate, from grep surveys:
    lower.py rules into a cbe dialect switch.
 5. Phase 2 on 9front QEMU, Phase 3 libdraw video driver (split-process first), Phase 4 CI.
 Keep PLAN.md in the tarball updated as the source of truth.
+
+=== 11. SESSION 2 (2026-11-26, Claude Code, user's WSL) ===
+Commits: e0ca268 "Phase 0.5" (state as handed off). The work below is the commit after it.
+Local setup now (all ignored by git): phase0/work/{llvm-cbe,llvm-src,goken9cc}, phase0/out/. ~/9front holds the 9front ISO, extracted
+root/, 9pc64, u9fs, plus an unused preinstalled 9front-11952.amd64.qcow2 (fine for interactive use).
+- Local llvm-cbe had been built from the OLD patch (no -cbe-explicit-padding); re-applied patches/llvm-cbe-phase0.patch and rebuilt.
+  The old tree state is a git stash inside work/llvm-cbe (droppable).
+- Re-verified locally: Phase 0 gate 3/3, Phase 0.5 goken 8/8. Line counts grew with explicit padding (t3_stl.c 11,169 lines).
+
+C corpus (new): plan9/p9check_c.sh (one ISO C program: clang -std=gnu11 -O1 -> IR -> internalize/globaldce -> cbe -> lower.py --libc
+-> 6c -> 6l + libc_p9.6 + libc; compare with native clang AND Results/<prog>; exit status compared separately), plan9/run_compcert.sh.
+  Result on goken: CompCert 23/24. binarytrees matches native for depth <= 12 but exhausts goken's 64 MB bump malloc whose free() is a
+  no-op (goken libc limit, documented in goken's own mkfile). siphash24 needs -Du64/-Du32/-Du8 (goken edited it to rely on its u.h).
+goken tests/c: `mk test` passes in all 7 dirs on all arches (needs qemu-user; installed). It is Plan 9-dialect compiler-bug repros with
+  own runtime stubs, so it validates goken 6c, NOT the translator. Do not try to push it through clang.
+
+libc ABI finding (important for OpenTTD): the IR is LP64 Linux; Plan 9 amd64 long is 32 bit. Plan 9 strtol/atol/labs return 32-bit
+  long; %ld prints 32 bits; no printf/FILE/stdout. 6c passes every vararg in an 8-byte slot, so int/long mixing in varargs works
+  only if formats are rewritten. Plan 9 %x/%o are signed; 'u' is a FLAG in 9front ("%ud") but a VERB in goken ("%u" works).
+  -> plan9/libc_p9.c (Plan 9 style, uses only calls common to 9front and goken libc): own printf (integers formatted by hand,
+  floats via print with rebuilt flags/width/prec), buffered stdout flushed by c_exit, FILE via open/read/create, strtol & co as
+  vlong wrappers, exp2/sinf/cosf/..., bcmp, glibc __ctype_toupper_loc/__ctype_tolower_loc tables, and main() wrapping c_main so
+  the C return value becomes the exits() status. lower.py --libc renames the RENAMED list (stdio, strtol..., exit, main) to c_*.
+cbe bug fixed (patch regenerated): with -cbe-explicit-padding, static struct initializers did not emit values for padN[] members,
+  so values shifted into pad arrays (6c error on sha3; via brace elision it can be a SILENT misassignment). Now emits { 0 } per gap
+  (printPadBefore in the ConstantStruct printer). llvm_ctor_* (non-static) path assigns by field name and is unaffected.
+lower.py: __builtin_unreachable() -> for(;;) abort(), because 6c rejects a non-void function ending in abort() ("no return at end").
+
+9front harness (new): plan9/setup_9front.sh (one time: ISO -> ~/9front/root, 9pc64, build u9fs from plan9foundation source) and
+  plan9/run_9front.sh (each run, after p9bundle.sh): copies out/p9bundle into root/p9bundle, writes root/rc/bin/termrc.local that,
+  only when the kernel arg p9test=yes, runs run9front.rc > results.txt, writes exitcode, reboots; QEMU -kernel 9pc64 -nographic
+  -append "nobootprompt=tcp fs=10.0.2.100 auth=10.0.2.100 console=0 ..." and -netdev user,guestfwd=tcp:10.0.2.100:564-cmd:unshare -r
+  u9fs -a none -u $USER root. Results land in out/9front-results.txt, console in out/9front-console.log.
+  Gotchas found: slirp refuses guestfwd on its gateway 10.0.2.2 (use .100); u9fs chroot()s into the served dir -> needs root, solved
+  with an unprivileged user namespace (unshare -r); in that namespace only uid/gid 0 exist, and u9fs setegid()s to the user's gid,
+  so the SERVED root's etc/passwd and etc/group must list the user as 0 (setup_9front.sh does it; symptom otherwise: creating any file
+  fails with "Invalid argument", u9fs.log "setegid(yrk/1000) failed"). u9fs logs to /tmp/u9fs.log. Without KVM (TCG) a run takes
+  well over 10 minutes.
+p9bundle.sh rewritten: cxx/ (link rt_p9.6) and c/ (link libc_p9.6) dirs, <t>.expected + <t>.rc, Results/knucleotide-input.txt.
+  run9front.rc: rc has no `continue` (old script was broken) and 9front has no `head` (use sed Nq); each test is an rc fn with
+  if-not chains; success status is '' on 9front but '0' under goken's rc. Dry run under goken on Linux works:
+  RCMAIN=$G/etc/rcmain.unix rc -c "path=(...); cflags=(-I... -Damd64); ldflags=(-L... -H7 -E _main); . ./run9front.rc"
+  (env vars arrive in rc as ONE string, so pass list values inside -c; `. file` searches $path, use ./run9front.rc). 31/32 there.
+
+FIRST REAL 9FRONT RESULT (release 11952, TCG, run still going when this was written; C corpus results not yet recorded):
+  all 8 C++ tests FAIL on 9front.  Causes seen:
+  (a) the C++ path still does `perl s/printf/print/` and the tests use %u: on 9front 'u' is a flag, so "%u" prints nothing/garbage
+      ("m1 n=ap>=1 sum=%", "t1 %"); goken accepted it, which is why goken passed. Varargs then go out of step -> probably the traps
+      in m2 (fault read 0x14), m5 (GP fault), t3 (fault write) - UNVERIFIED that they are only knock-on effects.
+  (b) status "main": on 9front returning from main() calls exits("main"); the C++ path has no main wrapper.
+  Fix (not done yet): route the C++ tests through libc_p9.c as well (lower.py --libc, link libc_p9.6 + rt_p9.6, drop the perl
+  printf->print step and rt_p9's role in printing), then rerun goken + 9front. Lesson: goken passing says little about libc
+  behaviour; anything printf-like must not depend on Plan 9 verb semantics.
+
+Next steps now (replace section 10's first two items):
+1. Read out/9front-results.txt for the C corpus. Fix the C++ printf/main issue above; rerun run_p9.sh, run_compcert.sh, p9bundle.sh,
+   run_9front.sh (with KVM once the user is in group kvm). Investigate any traps that survive the fix.
+2. Fold the 9front run into one gate script (goken fast loop + 9front truth) and add it to PLAN.md.
+3. Then Phase 1a as in section 10 item 3.

@@ -1,5 +1,5 @@
 diff --git a/lib/Target/CBackend/CBackend.cpp b/lib/Target/CBackend/CBackend.cpp
-index 8d57096..44117aa 100644
+index 8d57096..da54988 100644
 --- a/lib/Target/CBackend/CBackend.cpp
 +++ b/lib/Target/CBackend/CBackend.cpp
 @@ -52,6 +52,14 @@ namespace llvm_cbe {
@@ -81,7 +81,51 @@ index 8d57096..44117aa 100644
    return Out;
  }
  
-@@ -2594,6 +2627,8 @@ void CWriter::generateHeader(Module &M) {
+@@ -1538,12 +1571,35 @@ void CWriter::printConstant(Constant *CPV, enum OperandContext Context) {
+       Out << "{ ";
+     }
+ 
++    // With -cbe-explicit-padding the struct declaration has uint8_t padN[]
++    // members between fields; a static initializer must supply a value for
++    // each of them, or (through brace elision) later values shift into the
++    // pad arrays. Mirrors the gap computation in printStructDeclaration.
++    // Trailing padding (padtail) needs nothing: omitted members are zero.
++    const StructLayout *PadSL = CBEExplicitPadding && Context == ContextStatic
++                                    ? TD->getStructLayout(ST)
++                                    : nullptr;
++    uint64_t PadPrevEnd = 0;
++    auto printPadBefore = [&](unsigned i, bool &printed) {
++      if (!PadSL)
++        return;
++      uint64_t Off = PadSL->getElementOffset(i);
++      if (Off > PadPrevEnd) {
++        if (printed)
++          Out << ", ";
++        Out << "{ 0 }";
++        printed = true;
++      }
++      PadPrevEnd = Off + TD->getTypeAllocSize(ST->getElementType(i));
++    };
++
+     if (isa<ConstantAggregateZero>(CPV) || isa<UndefValue>(CPV)) {
+       bool printed = false;
+       for (unsigned i = 0, e = ST->getNumElements(); i != e; ++i) {
+         Type *ElTy = ST->getElementType(i);
+         if (isEmptyType(ElTy))
+           continue;
++        printPadBefore(i, printed);
+         if (printed)
+           Out << ", ";
+         printConstant(Constant::getNullValue(ElTy), Context);
+@@ -1556,6 +1612,7 @@ void CWriter::printConstant(Constant *CPV, enum OperandContext Context) {
+         Constant *C = cast<Constant>(CPV->getOperand(i));
+         if (isEmptyType(C->getType()))
+           continue;
++        printPadBefore(i, printed);
+         if (printed)
+           Out << ", ";
+         printConstant(C, Context);
+@@ -2594,6 +2651,8 @@ void CWriter::generateHeader(Module &M) {
        case Intrinsic::ssub_sat:
        case Intrinsic::sshl_sat:
        case Intrinsic::ushl_sat:
@@ -90,7 +134,7 @@ index 8d57096..44117aa 100644
        case Intrinsic::bswap:
        case Intrinsic::ceil:
        case Intrinsic::ctlz:
-@@ -2714,8 +2749,11 @@ void CWriter::generateHeader(Module &M) {
+@@ -2714,8 +2773,11 @@ void CWriter::generateHeader(Module &M) {
  
        Type *ElTy = I->getValueType();
        unsigned Alignment = I->getAliaseeObject()->getAlignment();
@@ -103,7 +147,7 @@ index 8d57096..44117aa 100644
        if (IsOveraligned) {
          headerUseAligns();
          Out << "__PREFIXALIGN__(" << Alignment << ") ";
-@@ -3628,6 +3666,8 @@ void CWriter::printModuleTypes(raw_ostream &Out) {
+@@ -3628,6 +3690,8 @@ void CWriter::printModuleTypes(raw_ostream &Out) {
    // Emit them now, before the function that uses them is emitted
    for (auto &F : prototypesToGen) {
      Out << '\n';
@@ -112,7 +156,7 @@ index 8d57096..44117aa 100644
      printFunctionProto(Out, F, GetValueName(F));
      Out << ";\n";
    }
-@@ -4730,6 +4770,18 @@ void CWriter::printIntrinsicDefinition(FunctionType *funT, unsigned Opcode,
+@@ -4730,6 +4794,18 @@ void CWriter::printIntrinsicDefinition(FunctionType *funT, unsigned Opcode,
        Out << " : r;\n";
        break;
  
@@ -131,7 +175,7 @@ index 8d57096..44117aa 100644
      case Intrinsic::bswap:
        cwriter_assert(retT == elemT);
        cwriter_assert(!isa<VectorType>(retT));
-@@ -4903,6 +4955,8 @@ bool CWriter::lowerIntrinsics(Function &F) {
+@@ -4903,6 +4979,8 @@ bool CWriter::lowerIntrinsics(Function &F) {
            case Intrinsic::ssub_sat:
            case Intrinsic::ushl_sat:
            case Intrinsic::sshl_sat:
@@ -140,7 +184,7 @@ index 8d57096..44117aa 100644
            case Intrinsic::bswap:
            case Intrinsic::ceil:
            case Intrinsic::ctlz:
-@@ -5245,6 +5299,8 @@ bool CWriter::visitBuiltinCall(CallInst &I, Intrinsic::ID ID) {
+@@ -5245,6 +5323,8 @@ bool CWriter::visitBuiltinCall(CallInst &I, Intrinsic::ID ID) {
    case Intrinsic::usub_with_overflow:
    case Intrinsic::umul_with_overflow:
    case Intrinsic::smul_with_overflow:
