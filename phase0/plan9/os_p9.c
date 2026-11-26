@@ -1,10 +1,12 @@
 /*
  * The POSIX/Linux operating-system calls OpenTTD (and libc++) make, on
  * Plan 9: files with POSIX flags, process, time, user and system
- * information, randomness, sleeping.  Signals, backtraces, dynamic
- * loading and sockets are accepted and fail cleanly for now (sockets:
- * Plan 9 dial/announce later).  Structures are glibc's x86-64 layouts and
- * error numbers Linux's, as the translated code was compiled against.
+ * information, randomness, sleeping.  Signals, backtraces and dynamic
+ * loading are accepted and fail cleanly.  Sockets, and close and
+ * ioctl, which take sockets, are in net_p9.c (9front) or net_none.c
+ * (goken).  Structures are glibc's x86-64
+ * layouts and error numbers Linux's, as the translated code was
+ * compiled against.
  * Names that Plan 9 libc also has, with another meaning or ABI, are
  * renamed by lower.py --libc to c_<name>.
  */
@@ -25,15 +27,9 @@ enum
 	Oappend		= 02000,
 
 	/* Linux errno */
-	Ebadf		= 9,
 	Eexist		= 17,
 	Einval		= 22,
-	Enotty		= 25,
 	Enosys		= 38,
-	Eafnosupport	= 97,
-
-	/* getaddrinfo */
-	Eaifail		= -4,
 
 	/* sysconf */
 	Scclktck	= 2,
@@ -198,13 +194,6 @@ int
 fdatasync(int)
 {
 	return 0;
-}
-
-int
-ioctl(int, uvlong, ...)
-{
-	seterr(Enotty);
-	return -1;
 }
 
 int
@@ -521,156 +510,5 @@ dlsym(void*, char*)
 int
 dlclose(void*)
 {
-	return 0;
-}
-
-/*
- * Sockets: none yet.  OpenTTD's network code treats these failures as
- * "no network".  select only waits.
- */
-
-int
-socket(int, int, int)
-{
-	seterr(Eafnosupport);
-	return -1;
-}
-
-static int
-nosock(void)
-{
-	seterr(Ebadf);
-	return -1;
-}
-
-/* bind, listen and accept are Plan 9 libc names too: lower.py renames them */
-int
-c_bind(int, void*, uint)
-{
-	return nosock();
-}
-
-int
-c_listen(int, int)
-{
-	return nosock();
-}
-
-int
-c_accept(int, void*, void*)
-{
-	return nosock();
-}
-
-int
-connect(int, void*, uint)
-{
-	return nosock();
-}
-
-vlong
-send(int, void*, uvlong, int)
-{
-	return nosock();
-}
-
-vlong
-sendto(int, void*, uvlong, int, void*, uint)
-{
-	return nosock();
-}
-
-vlong
-recv(int, void*, uvlong, int)
-{
-	return nosock();
-}
-
-vlong
-recvfrom(int, void*, uvlong, int, void*, void*)
-{
-	return nosock();
-}
-
-int
-setsockopt(int, int, int, void*, uint)
-{
-	return nosock();
-}
-
-int
-getsockopt(int, int, int, void*, void*)
-{
-	return nosock();
-}
-
-int
-getsockname(int, void*, void*)
-{
-	return nosock();
-}
-
-int
-getpeername(int, void*, void*)
-{
-	return nosock();
-}
-
-int
-getaddrinfo(char*, char*, void*, void **res)
-{
-	*res = nil;
-	return Eaifail;
-}
-
-void
-freeaddrinfo(void*)
-{
-}
-
-int
-getnameinfo(void*, uint, char*, uint, char*, uint, int)
-{
-	return Eaifail;
-}
-
-char*
-gai_strerror(int)
-{
-	return "name resolution is not supported";
-}
-
-int
-getifaddrs(void **ifap)
-{
-	*ifap = nil;
-	seterr(Enosys);
-	return -1;
-}
-
-void
-freeifaddrs(void*)
-{
-}
-
-/* glibc struct timeval */
-typedef struct Ctimeval Ctimeval;
-struct Ctimeval
-{
-	vlong	sec;
-	vlong	usec;
-};
-
-int
-select(int, void *r, void *w, void *e, Ctimeval *tv)
-{
-	if(r != nil)
-		memset(r, 0, 128);	/* fd_set */
-	if(w != nil)
-		memset(w, 0, 128);
-	if(e != nil)
-		memset(e, 0, 128);
-	if(tv != nil)
-		sleep(tv->sec*1000 + tv->usec/1000);
 	return 0;
 }

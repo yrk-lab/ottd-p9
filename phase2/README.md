@@ -33,6 +33,31 @@ LLVM made module-level names unique, and C++ file-local names are mangled.
     first; Plan 9 dial/announce later)
   - 1-byte atomics
 
+## Sockets: the dedicated server takes a client (2026-11-26)
+
+The BSD socket calls run on Plan 9 networking (`../phase0/plan9/net_p9.c`): TCP and UDP over IPv4, through
+dial, announce, listen and accept. OpenTTD polls (non-blocking accept/recv/recvfrom, select with no timeout)
+where Plan 9 blocks, so each receiving socket has a helper that blocks for it and fills the socket's buffers;
+the calls look only at those. The fd the program sees is the conversation's ctl. Helpers never call malloc,
+so one killed at close holds no lock but its socket's. A connected socket's reader is ended by TCP's
+graceful `close` ctl message (FIN, and the reader's read returns); closing the descriptors is not enough, as
+the blocked read keeps the conversation open (tried: the peer never sees end of stream).
+
+The system part is a file of its own, as rd's TLS (`tls9f.c`/`tlsp9p.c`): `net9f.c` on 9front (helpers are
+rfork(RFMEM) processes, UDP is /net's header mode, names go to /net/cs) and `netp9p.c` with plan9port
+(threads, udpread/udpwrite), behind `net.h`. goken has no dial or announce: its builds link `net_none.c`,
+the failing stubs. lower.py renames the whole socket API (and close, ioctl) to `c_<name>`, so ours never take
+the place of the C library's, which plan9port's lib9 uses.
+
+Tests (`../phase0/tests_net/n1_sock.c`: listen, non-blocking accept, connect, data both ways, end of stream,
+UDP both ways), compared with the same test on Linux:
+- fast loop, seconds: `../phase0/plan9/run_net.sh` builds it with plan9port against net_p9.c + netp9p.c;
+- 9front: `only=net run9front.sh` (under 2 minutes), the test translated through the pipeline.
+
+The full `run9front.sh` then starts `openttd -D` on 9front, and the stock Linux build joins it as a client
+through QEMU's port forward: it joins, starts a company and plays for 60 s; no desync on either side. A
+diskless 9front boot has no loopback interface: termrc.local adds it (127.1), as termrc does on a disk.
+
 ## On 9front: the gate passes (2026-11-26)
 
 `run9front.sh` stages the units, the runtime and the data in the 9front root, boots 9front diskless under

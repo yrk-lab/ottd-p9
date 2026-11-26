@@ -13,10 +13,11 @@ LIBC = "--libc" in sys.argv[1:]	# translated ISO C program: route libc reference
 RENAMED = """printf fprintf vprintf vfprintf snprintf vsnprintf putc fputc putchar fputs puts fwrite fflush fopen fclose
 getc fgetc getchar fgets perror strtol strtoul atol labs strlen exit stdin stdout stderr main
 stat lstat fstat opendir readdir closedir mkdir remove rename getcwd realpath
-open read write lseek dup time strerror isatty
+open read write lseek dup close time strerror isatty
 fread fseek fseeko ftell ftello feof ferror clearerr fileno flockfile funlockfile fflush_unlocked ungetc
 getwc ungetwc fputwc vasprintf tan
-bind listen accept""".split()
+socket bind listen accept connect send sendto recv recvfrom setsockopt getsockopt getsockname getpeername
+getaddrinfo freeaddrinfo getnameinfo gai_strerror getifaddrs freeifaddrs select ioctl""".split()
 
 # 1. Preamble: 6c has no #if.  Drop every #if..#endif block and all
 #    #includes; keep the helper function definitions.

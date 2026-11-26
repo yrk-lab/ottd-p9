@@ -414,3 +414,18 @@ Next steps now (replace section 10's first two items):
   Debug recipe (goken): gdb on openttd.exe, `nm` from goken for symbols (syms.all), symbolize stack words by
   nearest T symbol; first arg at 8(SP) on entry (goken 6c passes everything on the stack).
   Next: dedicated server needs sockets (Plan 9 dial/announce under the BSD socket shims); liblzma; Phase 3 video.
+- SOCKETS DONE, PHASE 2 GATE PASSES (2026-11-26): openttd -D on 9front, stock Linux client joins through QEMU
+  hostfwd (host 127.0.0.1:13979 -> guest 3979, tcp+udp), starts a company, 60 s, no desync. Same boot: n1_sock
+  PASS, gate world/regression same. Design (phase0/plan9/net_p9.c, net.h): visible fd = conversation ctl
+  (socket() reserves it with /dev/null, dup onto it later); a helper per receiving socket blocks (read / listen)
+  and fills fixed buffers (no malloc in helpers); calls poll the buffers; select only reports sockets (stdin
+  never ready: the dedicated console would block). System parts in own files, as rd's tls9f.c/tlsp9p.c (user
+  asked): net9f.c (rfork RFMEM, /net header-mode UDP, /net/cs), netp9p.c (pthreads, udpread/udpwrite from
+  libip; announce "*" -> 0.0.0.0 because p9p makes * IPv6 and udpread rejects v6 peers), net_none.c (goken).
+  lower.py RENAMED now has the whole socket API + close + ioctl (p9p's lib9 calls glibc's socket()).
+  Lessons: 9front TCP "close" ctl = graceful FIN and wakes the reader; closing fds alone does not (the blocked
+  read holds the conv; tested); "hangup" = RST. Diskless 9front has no loopback: ip/ipconfig -P loopback
+  /dev/null 127.1 in termrc.local. rc has no `break` (loops ran to the end). gcc's _FORTIFY_SOURCE wrappers
+  call recv by asm name, bypassing #define renames: -U_FORTIFY_SOURCE. Null-driver clients spin (ticks= runs
+  out at once): use a huge ticks + timeout.
+  Fast loops: phase0/plan9/run_net.sh (p9p, seconds); only=net phase2/run9front.sh (9front, <2 min).

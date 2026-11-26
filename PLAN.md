@@ -55,8 +55,9 @@ comes with libc++abi's typeinfo code, which the exception runtime needs anyway.
    Old gcc under APE is only a fallback. Gate: dedicated server runs natively on 9front amd64 (QEMU).
    Status (2026-11-26, later): the Plan 9 runtime is written (`phase0/plan9/{libc,os,rt}_p9.c`), the kencc build
    links, and on real 9front (QEMU/KVM, `phase2/run9front.sh`) it plays both phase 1 gate scenarios with the null
-   video driver for 100000 ticks, byte-identical to the stock build. Left for the gate's dedicated server: sockets
-   (the BSD calls are failing stubs; Plan 9 dial/announce under them). Details: `phase2/README.md`.
+   video driver for 100000 ticks, byte-identical to the stock build. Sockets run on Plan 9 dial/announce
+   (`phase0/plan9/net_p9.c`, system parts net9f.c/netp9p.c): `openttd -D` on 9front takes a stock Linux client,
+   which joins and plays with no desync. The Phase 2 gate passes. Details: `phase2/README.md`.
    Earlier (2026-11-26, `phase2/`): the translated OpenTTD, split into 32 units (`phase2/split.py`), compiles with goken
    6c without errors; 6l lacked 140 C-library symbols, 123 since zlib is translated with the program (`phase2/missing.txt`:
    stdio, locale, wide chars, float math, pthreads, OS, sockets). With zlib inside and liblzma off, the phase 1 gate

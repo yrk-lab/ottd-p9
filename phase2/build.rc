@@ -1,13 +1,20 @@
 #!/bin/rc
 # build.rc - build the translated OpenTTD on 9front and run it
-#	In /ottd: the units from split.py (openttd.h, data.c, fn*.c),
-#	the exception wrappers (invoke.c), the Plan 9 runtime (rt_p9.c,
-#	libc_p9.c, os_p9.c, eh_rt.c) and the headers (shim/).  Compiles
-#	every unit with this system's 6c, two at a time, links with 6l,
-#	and runs openttd -h.  With the data (lang/ etc., opengfx/ and
-#	regression.sav, staged by run9front.sh) it then plays the Phase 1
-#	gate scenarios for $ticks ticks (default 100000), leaving the exit
-#	saves in gate/world.sav and gate/regression.sav.
+#	In /ottd, staged by run9front.sh: the Plan 9 runtime (rt_p9.c,
+#	libc_p9.c, os_p9.c, net_p9.c and net9f.c, eh_rt.c) and its headers
+#	(shim/, net.h); the socket tests, translated (nettest/); the
+#	units from split.py (openttd.h, data.c, fn*.c) and the exception
+#	wrappers (invoke.c); the data (lang/ etc., opengfx/,
+#	regression.sav).  Compiles every unit with this system's 6c, two
+#	at a time.  Then, for what is staged:
+#	- runs each socket test, output in nettest/name.out;
+#	- links openttd.out with 6l and runs openttd -h;
+#	- plays the Phase 1 gate scenarios for $ticks ticks (default
+#	  100000), leaving the exit saves in gate/world.sav and
+#	  gate/regression.sav;
+#	- starts a dedicated server (port 3979), says so in ded/ready,
+#	  and stops it when the host's client is done (ded/done) or
+#	  after $dedtime seconds (default 600); its log is ded/log.
 rfork e
 cd /ottd
 fail=()
@@ -41,6 +48,22 @@ if(! ~ $#fail 0){
 	exit fail
 }
 date
+
+# the socket tests, against the runtime
+rt=(rt_p9.6 libc_p9.6 os_p9.6 net_p9.6 net9f.6)
+for(f in `{ls nettest/*.c >[2]/dev/null}){
+	t=`{echo $f | sed 's/\.c$//'}
+	if(6c -w -I/ottd/shim -o $t.6 $f >$t.log >[2=1] && 6l -o $t.x $t.6 $rt >>$t.log >[2=1]){
+		$t.x >$t.out >[2=1]
+		echo $t status $status
+	}
+	if not{
+		echo $t: BUILD FAILED
+		sed 5q $t.log
+	}
+}
+if(! test -f openttd.h)
+	exit ''
 if(! 6l -o openttd.out *.6 >6l.log >[2=1]){
 	echo 6l FAILED
 	sed 10q 6l.log
@@ -99,4 +122,33 @@ if(test -d /ottd/opengfx){
 	for(s in world regression)
 		play $s
 	date
+}
+
+# a dedicated server for the host's client
+if(test -f /ottd/ded/openttd.cfg){
+	d=/ottd/ded
+	if(~ $#dedtime 0)
+		dedtime=600
+	mkdir -p $d/data/openttd/baseset $d/config
+	bind /ottd/opengfx $d/data/openttd/baseset
+	XDG_DATA_HOME=$d/data XDG_CONFIG_HOME=$d/config ./openttd.out -D -x -c $d/openttd.cfg \
+		-d net^'='^3 >$d/log >[2=1] &
+	pid=$apid
+	# rc has no break: count in the condition
+	i=0
+	while(! grep -s 'starting game' $d/log && test $i -lt 300){
+		sleep 1
+		i=`{echo $i + 1 | hoc}
+	}
+	date >$d/ready
+	echo dedicated server up
+	i=0
+	while(! test -f $d/done && test $i -lt $dedtime){
+		sleep 1
+		i=`{echo $i + 1 | hoc}
+	}
+	echo kill >/proc/$pid/note
+	sleep 1
+	echo dedicated server log:
+	grep -v '^$' $d/log | tail -20
 }
