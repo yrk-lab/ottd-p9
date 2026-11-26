@@ -55,3 +55,18 @@ plan9/run_9front.sh       # boot 9front diskless in QEMU, run the bundle, print 
 Settings (`common.sh`) can be overridden from the environment: `work out cbe goken nine triple`.
 Result on the user's WSL (2026-11-26): goken C++ 8/8, CompCert 23/24 (binarytrees: goken's never-freeing malloc);
 **real 9front 32/32**. See ../PLAN.md for what 6c and the Plan 9 libc needed.
+
+## C++ exceptions through the translator
+```
+./run_eh.sh               # tests_eh/*.cpp: gcc stand-in
+plan9/run_p9.sh           # includes tests_eh with p9check -E (goken 6c)
+plan9/p9bundle.sh && plan9/run_9front.sh   # and on real 9front
+```
+Exceptions are lowered in the IR (`opt -wasm-lower-em-ehsjlj -enable-emscripten-cxx-exceptions`): every invoke becomes
+a call through an `__invoke_<sig>` wrapper plus a test of `__THREW__`. `eh/mkinvoke.py` generates the wrappers in C
+from the lowered IR; `eh/eh_rt.c` is the `__cxa_*` runtime (setjmp/longjmp; `eh/unix` and `eh/plan9` headers);
+`eh/eh_match.cpp` matches catch clauses with libc++abi's typeinfo classes, which are translated with the program
+(`build_libcxx.sh eh`). Result 2026-11-26: tests_eh 5/5 on gcc, goken 6c and real 9front (bundle 37/37).
+Found on the way: a cbe GEP bug (a struct field that is an array, indexed after the `P->field` shortcut, lost its
+`.array`), static constructors for kencc (`lower.py` emits `__p9_ctors`), glibc's `__errno_location`,
+`__isoc23_strtol` and `__atomic_*` calls in libc_p9.c / rt_p9.c.

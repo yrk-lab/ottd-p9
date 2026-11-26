@@ -70,10 +70,126 @@ __cxa_atexit(void (*)(void*), void*, void*)
 	return 0;
 }
 
+/* identifies this module in __cxa_atexit registrations */
+void	*__dso_handle = &__dso_handle;
+
 /* std::__libcpp_verbose_abort(char const*, ...) */
 void
 _ZNSt3__122__libcpp_verbose_abortEPKcz(char*, ...)
 {
 	fprint(2, "libc++ abort\n");
 	abort();
+}
+
+/*
+ * __atomic_* library calls (cbe lowers atomic instructions to them;
+ * libc++abi's reference-counted strings use fetch_add).  The program
+ * is single threaded, so plain memory operations are atomic enough.
+ * The last argument(s) are the C11 memory orders, ignored.
+ */
+
+uint
+__atomic_fetch_add_4(uint *p, uint v, int)
+{
+	uint o;
+
+	o = *p;
+	*p = o + v;
+	return o;
+}
+
+uint
+__atomic_fetch_sub_4(uint *p, uint v, int)
+{
+	uint o;
+
+	o = *p;
+	*p = o - v;
+	return o;
+}
+
+uvlong
+__atomic_fetch_add_8(uvlong *p, uvlong v, int)
+{
+	uvlong o;
+
+	o = *p;
+	*p = o + v;
+	return o;
+}
+
+uvlong
+__atomic_fetch_sub_8(uvlong *p, uvlong v, int)
+{
+	uvlong o;
+
+	o = *p;
+	*p = o - v;
+	return o;
+}
+
+uint
+__atomic_load_4(uint *p, int)
+{
+	return *p;
+}
+
+uvlong
+__atomic_load_8(uvlong *p, int)
+{
+	return *p;
+}
+
+void
+__atomic_store_4(uint *p, uint v, int)
+{
+	*p = v;
+}
+
+void
+__atomic_store_8(uvlong *p, uvlong v, int)
+{
+	*p = v;
+}
+
+uint
+__atomic_exchange_4(uint *p, uint v, int)
+{
+	uint o;
+
+	o = *p;
+	*p = v;
+	return o;
+}
+
+uvlong
+__atomic_exchange_8(uvlong *p, uvlong v, int)
+{
+	uvlong o;
+
+	o = *p;
+	*p = v;
+	return o;
+}
+
+int
+__atomic_compare_exchange_4(uint *p, uint *expected, uint desired, int, int)
+{
+	if(*p == *expected){
+		*p = desired;
+		return 1;
+	}
+	*expected = *p;
+	return 0;
+}
+
+int
+__atomic_compare_exchange_8(uvlong *p, uvlong *expected, uvlong desired, int, int)
+{
+	if(*p == *expected){
+		*p = desired;
+		return 1;
+	}
+	*expected = *p;
+	return 0;
 }

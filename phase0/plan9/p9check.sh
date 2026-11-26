@@ -1,5 +1,5 @@
 #!/bin/bash
-# p9check [-x clangflags] [-e expected] file.cpp|file.c
+# p9check [-E] [-x clangflags] [-e expected] file.cpp|file.c
 #	Translate one test and build it with kencc:
 #	clang -> LLVM IR (C++: + libc++) -> internalize, globaldce
 #	-> llvm-cbe -cbe-explicit-padding -> lower.py --libc
@@ -8,19 +8,24 @@
 #	compare stdout+stderr and exit status; with -e, also compare the
 #	output with the file expected.  Prints "name: PASS" or the reason
 #	it failed, and exits accordingly.
+#	-E	C++ with exceptions and RTTI: link the libc++/libc++abi IR
+#		built by run_eh.sh, lower exceptions (Emscripten style) and
+#		add the eh/ runtime and the generated __invoke_ wrappers.
 set -uo pipefail
 . "$(dirname "$0")/../common.sh"
 gokenpath
 
 usage()
 {
-	fatal "usage: p9check [-x clangflags] [-e expected] file.cpp|file.c"
+	fatal "usage: p9check [-E] [-x clangflags] [-e expected] file.cpp|file.c"
 }
 
 xflags=
 expected=
-while getopts x:e: c; do
+eh=
+while getopts Ex:e: c; do
 	case $c in
+	E)	eh=1 ;;
 	x)	xflags=$OPTARG ;;
 	e)	expected=$OPTARG ;;
 	*)	usage ;;
@@ -35,6 +40,14 @@ srcdir=$(dirname "$src")
 name=$(basename "${src%.*}")
 d=$out/p9/$name
 inc="-I$goken/include -I$goken/include/ALL -I$goken/include/arch/amd64"
+ehinc="-I$top/eh -I$top/eh/plan9"
+lib=$out/libcxx_min.ll
+publics=main
+if [ -n "$eh" ]; then
+	cxxflags="--target=$triple -std=c++20 -stdlib=libc++ -O1 -g0 -D_LIBCPP_DISABLE_EXTERN_TEMPLATE"
+	lib=$out/eh/libcxx_eh.ll
+	publics=main,eh_can_catch
+fi
 mkdir -p "$d"
 
 say()
@@ -42,11 +55,11 @@ say()
 	echo "$name: $*"
 }
 
-# compile a shim when its source is newer than its object
+# shim dir name: compile dir/name.c when it is newer than its object
 shim()
 {
-	if [ ! "$out/p9/$1.6" -nt "$plan9/$1.c" ]; then
-		6c -w -Damd64 $inc -o "$out/p9/$1.6" "$plan9/$1.c" || fatal "cannot compile $1.c"
+	if [ ! "$out/p9/$2.6" -nt "$1/$2.c" ]; then
+		6c -w -Damd64 $inc $ehinc -o "$out/p9/$2.6" "$1/$2.c" || fatal "cannot compile $2.c"
 	fi
 }
 
@@ -54,21 +67,36 @@ translate()
 {
 	case $src in
 	*.cpp)
-		[ -f "$out/libcxx_min.ll" ] || fatal "no libc++ IR: run build_libcxx.sh"
+		[ -f "$lib" ] || fatal "no $lib: run build_libcxx.sh (run_eh.sh for -E)"
 		clang++-17 $cxxflags $xflags -S -emit-llvm "$src" -o "$d/t.ll" &&
-		llvm-link "$d/t.ll" "$out/libcxx_min.ll" -S -o "$d/all.ll" ;;
+		llvm-link "$d/t.ll" "$lib" -S -o "$d/all.ll" ;;
 	*.c)
 		clang-17 $cflags $xflags -S -emit-llvm "$src" -o "$d/all.ll" ;;
 	esac &&
-	opt-17 -passes=internalize,globaldce --internalize-public-api-list=main "$d/all.ll" -S -o "$d/pruned.ll" &&
+	opt-17 -passes=internalize,globaldce --internalize-public-api-list=$publics "$d/all.ll" -S -o "$d/pruned.ll" &&
+	lowereh &&
 	"$cbe" -cbe-explicit-padding "$d/pruned.ll" -o "$d/t.c" &&
 	python3 "$plan9/lower.py" --libc <"$d/t.c" >"$d/t_p9.c"
+}
+
+# exceptions: invokes become __invoke_ wrapper calls (see eh/eh_rt.h)
+lowereh()
+{
+	[ -n "$eh" ] || return 0
+	opt-17 -wasm-lower-em-ehsjlj -enable-emscripten-cxx-exceptions "$d/pruned.ll" -S -o "$d/eh.ll" &&
+	sed 's/ thread_local / /; s/ cc99 / /' "$d/eh.ll" >"$d/pruned.ll" &&
+	python3 "$top/eh/mkinvoke.py" <"$d/pruned.ll" >"$d/invoke.c"
 }
 
 native()
 {
 	case $src in
-	*.cpp)	clang++-17 --target=$triple -std=c++20 -stdlib=libc++ -fno-exceptions -fno-rtti -O1 $xflags "$src" -o "$d/ref" ;;
+	*.cpp)
+		if [ -n "$eh" ]; then
+			clang++-17 $cxxflags $xflags "$src" -o "$d/ref"
+		else
+			clang++-17 --target=$triple -std=c++20 -stdlib=libc++ -fno-exceptions -fno-rtti -O1 $xflags "$src" -o "$d/ref"
+		fi ;;
 	*.c)	clang-17 $cflags $xflags "$src" -o "$d/ref" -lm ;;
 	esac
 }
@@ -80,21 +108,31 @@ run()
 	echo "rc=$?" >"$d/$2.rc"
 }
 
-shim rt_p9
-shim libc_p9
-rm -f "$d/t_p9.6" "$d/t.exe" "$d"/p9.* "$d"/ref.*
+shim "$plan9" rt_p9
+shim "$plan9" libc_p9
+shim "$top/eh" eh_rt
+rm -f "${d:?}"/*.6 "$d/t.exe" "$d"/p9.* "$d"/ref.* "$d/invoke.c" "$d/6c.log"
 
 if ! translate >"$d/translate.log" 2>&1; then
 	say TRANSLATION FAILED
 	tail -3 "$d/translate.log"
 	exit 1
 fi
-if ! (cd "$d" && 6c -w -I "$plan9/shim" t_p9.c) >"$d/6c.log" 2>&1; then
+objs="t_p9.6 ../rt_p9.6 ../libc_p9.6"
+if [ -n "$eh" ]; then
+	objs="$objs invoke.6 ../eh_rt.6"
+	if ! (cd "$d" && 6c -w -Damd64 $inc $ehinc invoke.c) >"$d/6c.log" 2>&1; then
+		say 6c FAILED on invoke.c
+		grep -v '^warning' "$d/6c.log" | sed 5q
+		exit 1
+	fi
+fi
+if ! (cd "$d" && 6c -w -I "$plan9/shim" t_p9.c) >>"$d/6c.log" 2>&1; then
 	say 6c FAILED
 	grep -v '^warning' "$d/6c.log" | sed 5q
 	exit 1
 fi
-if ! (cd "$d" && 6l -L "$goken/ROOT/arch/amd64/lib" -H7 -E _main -o t.exe t_p9.6 ../rt_p9.6 ../libc_p9.6 -lc) >"$d/6l.log" 2>&1; then
+if ! (cd "$d" && 6l -L "$goken/ROOT/arch/amd64/lib" -H7 -E _main -o t.exe $objs -lc) >"$d/6l.log" 2>&1; then
 	say 6l FAILED
 	sed 5q "$d/6l.log"
 	exit 1

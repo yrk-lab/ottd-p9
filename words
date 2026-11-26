@@ -258,3 +258,29 @@ Next steps now (replace section 10's first two items):
   Still bash on the Linux side (no plan9port dependency); rc could replace it later if wanted.
 - Next: Phase 1a (OpenTTD dedicated server natively with clang -fno-exceptions, patch series), per section 10 item 3. Consider
   making `plan9/run_p9.sh && plan9/run_compcert.sh && plan9/p9bundle.sh && plan9/run_9front.sh` the single Phase 0.5 gate.
+
+=== 13. PHASE 1 STARTED; EXCEPTIONS TRANSLATED (2026-11-26) ===
+- Phase 1 is issue #3 (In Progress on the board). phase1/: OpenTTD 15.3, src-ref/src-p9 exported without .git with one
+  shared .ottdrev; gate.sh = null video driver, 100000 ticks, uncompressed exit save, savenorm.py blanks DATE.id (random
+  survey session id; the only run-to-run difference). Saves are written under the -c config file's directory (save/autosave).
+- clang 17 + libc++ (exceptions on) = stock gcc 15 + libstdc++, byte for byte, both scenarios. Host tools via
+  -DHOST_BINARY_DIR=work/build-ref (upstream cross-compile mechanism) so strgen/settingsgen keep exceptions.
+- -fno-exceptions -fno-rtti survey: 223+ unique sites (50 TUs hit the error limit): ~105 exception sites in script engine
+  + Squirrel, ~80 dynamic_cast (GUI/widget code still compiled in dedicated), saveload, newgrf_bytereader, strings, thread.h.
+  135 core files call AI::/Game::/ScriptEvent*. 15.3 requires Threads (no option).
+- DECISION (user, 2026-11-26): translate exceptions instead of patching. Emscripten lowering pass exists in LLVM 17 and works
+  on x86-64 IR: opt-17 -wasm-lower-em-ehsjlj -enable-emscripten-cxx-exceptions (legacy-PM flag; -enable-new-pm=0 does not
+  exist). Output: calls to __invoke_<sig>(fn,args) with `cc99` and a thread_local i64 @__THREW__ (sed both away),
+  __cxa_find_matching_catch_<N> (N-2 typeinfo args), getTempRet0, llvm_eh_typeid_for, __resumeException.
+  phase0/eh/: eh_rt.c (C, compiled by gcc/6c, not translated: frames, setjmp/longjmp, __cxa_*), eh_match.cpp (translated;
+  libc++abi __shim_type_info::can_catch), mkinvoke.py (wrappers from the IR), unix/ and plan9/ eh_sys.h.
+  libc++/libc++abi IR with exceptions: build_libcxx.sh eh (libc++ needs -DLIBCXX_BUILDING_LIBCXXABI -D_LIBCPPABI_VERSION
+  or logic_error is defined twice). RTTI stays on (comes with libc++abi typeinfo).
+  Results: tests_eh 5/5 on gcc (run_eh.sh), goken 6c (run_p9.sh now 13/13) and REAL 9FRONT (bundle 37/37, ~3.5 min).
+  Fixes on the way: cbe GEP bug (struct-field shortcut did not update IntoT: array fields lost ->array[]), lower.py
+  static ctors -> __p9_ctors() called by libc_p9 main, libc_p9: __errno_location (Linux ERANGE 34) + own strtol family
+  with overflow + __isoc23_*; rt_p9: __atomic_* (single-threaded), __dso_handle. Bundle: tests/eh/<name>.c wrappers,
+  eh_rt.6 linked only into -E tests (eh_can_catch lives in the translated program).
+- Next: Phase 1 continues with exceptions ON: threads (libc++ without threads; OpenTTD's StartNewThread may fail ->
+  callers run inline), std::filesystem, then translate the OpenTTD build itself (whole-program IR, EH lowering, cbe).
+  Perf of a setjmp per invoke is unmeasured.

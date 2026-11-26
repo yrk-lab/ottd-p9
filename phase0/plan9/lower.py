@@ -42,6 +42,13 @@ s = re.sub(r"\b(l_fptr_\d+)\s*\*", r"\1 ", s)
 s = re.sub(r"\bUINT64_C\(\s*(\d+)\s*\)", r"\1ull", s)
 s = re.sub(r"\bINT64_C\(\s*(-?\d+)\s*\)", lambda m: m.group(1) + "ll", s)
 
+# 7. Static constructors: kencc has no __attribute__((constructor)).  Collect them in the order
+#    cbe declares them (module order) and call them from __p9_ctors, which libc_p9.c's main runs
+#    before the program's.  Static destructors are not run (as with rt_p9's __cxa_atexit).
+ctors = re.findall(r"\b(\w+)\(void\)[^;\n]*__ATTRIBUTE_CTOR__\s*;", s)
+s = re.sub(r"__ATTRIBUTE_(CTOR|DTOR)__", "", s)
+s += "\nvoid __p9_ctors(void) {\n" + "".join("  %s();\n" % c for c in dict.fromkeys(ctors)) + "}\n"
+
 if LIBC:
     s = re.sub(r"\b(" + "|".join(RENAMED) + r")\b", r"c_\1", s)
 sys.stdout.write("#include <stdint.h>\n#include <math.h>\ntypedef unsigned char bool;\n"

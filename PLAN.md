@@ -6,24 +6,38 @@
 - OpenTTD requires C++20 (since 14.0). cfront (~C++ 2.x/3.0: no full templates, no STL, no lambdas) cannot be extended to that: dead end.
 - No maintained modern C++-to-C source translator exists; C++-to-Go for a code base this size and style is not realistic.
   Go's Plan 9 port is itself still "experimental"; status of Go draw libs on *native* Plan 9 unverified.
-- Viable automatic route: **clang -> LLVM IR -> llvm-cbe -> C**. Known limits: no exception handling in C, GNU-flavoured output,
-  some intrinsics unsupported (patched as needed).
+- Viable automatic route: **clang -> LLVM IR -> llvm-cbe -> C**. Known limits: GNU-flavoured output, some intrinsics
+  unsupported (patched as needed). C has no exceptions: they are lowered in the IR (below), so OpenTTD keeps its own.
 - The generated C is GNU C; 6c/8c/pcc won't accept it as-is. Old gcc ports (ports2plan9/APE) exist but are stale.
 
 ## Pipeline
 ```
-OpenTTD tag -> clang (C++20, -fno-exceptions -fno-rtti, fixed triple)
-            -> per-TU LLVM IR (+ libc++ built to IR) -> llvm-link / globaldce
+OpenTTD tag -> clang (C++20, exceptions and RTTI on, fixed triple)
+            -> per-TU LLVM IR (+ libc++ and parts of libc++abi built to IR) -> llvm-link / globaldce
+            -> Emscripten-style exception lowering (opt -wasm-lower-em-ehsjlj): invokes become calls
+               through generated __invoke_ wrappers + a __THREW__ test, all plain IR
             -> llvm-cbe (patched; Plan 9 dialect + name hashing later)
-            -> C -> mk on Plan 9
+            -> C + eh runtime (setjmp/longjmp, phase0/eh) -> mk on Plan 9
 ```
-Hand-written pieces only: Plan 9 video driver, small OS layer, patch series for OpenTTD (file layer, exception sites).
+Hand-written pieces only: Plan 9 video driver, small OS layer, patch series for OpenTTD (file layer, threads).
+
+**Exceptions (decided 2026-11-26, Phase 1):** translated, not patched out. With `-fno-exceptions` OpenTTD 15.3 has
+133+ throw / 34 try sites (half in the script engine, which unwinds non-locally through Squirrel), so patching would
+stub scripting and make every upstream bump re-port them. Instead the IR is lowered the way Emscripten does it and a
+small C runtime implements the Itanium `__cxa_*` ABI with setjmp/longjmp: each `__invoke_<sig>` wrapper (generated per
+signature by `phase0/eh/mkinvoke.py`) pushes a frame and setjmps, a throw longjmps to the innermost frame, and cleanups
+and handlers stay ordinary code, so destructors run. Catch matching uses libc++abi's own typeinfo classes (translated).
+Cost: a setjmp per call site that has a cleanup or handler. Proven by `phase0/tests_eh` (throw/catch, class hierarchies
+and pointer adjustment, unwinding with RAII, rethrow, libc++'s own exceptions, OpenTTD-like patterns): identical to
+native on gcc, goken 6c and **real 9front**. **RTTI** stays on too (about 80 `dynamic_cast`s, mostly window code): it
+comes with libc++abi's typeinfo code, which the exception runtime needs anyway.
 
 ## Phases and gates
 0. **Feasibility** (toy C++ incl. STL through the pipeline, run on Linux). Gate: outputs identical to native build. *(this harness)*
 1. **Dedicated server, no graphics.** `OPTION_DEDICATED=ON`, no threads, no ICU/harfbuzz/freetype/fontconfig/curl/SDL/fluidsynth.
-   Build zlib + liblzma yourself; libc++ without threads/localization/filesystem (patch OpenTTD's `std::filesystem` use);
-   rewrite the few try/catch sites. Gate: loads a savegame, ticks N days, identical checksums vs upstream build (on Linux).
+   Build zlib + liblzma yourself; libc++ without threads/localization/filesystem (patch OpenTTD's `std::filesystem` use).
+   Exceptions and RTTI stay (see Pipeline). Gate (`phase1/gate.sh`): the same savegames, run the same number of ticks,
+   give byte-identical saves vs the stock upstream build. OpenTTD 15.3; clang 17 + libc++ already matches stock gcc.
 2. **Compile the C on Plan 9.** Primary path (proven small by Phase 0.5): a Plan 9 dialect mode in llvm-cbe (what `lower.py` does today + explicit padding)
    + symbol-name hashing. Old gcc under APE is only a fallback. Gate: dedicated server runs natively on 9front amd64 (QEMU).
 3. **Video driver.** `src/video/plan9_v.cpp` (translated C++) + small hand-written C shim on libdraw (initdraw, loadimage,

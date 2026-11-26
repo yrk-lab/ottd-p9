@@ -37,15 +37,24 @@ fn compare {
 	}
 }
 
-# check name: build tests/name.c and compare
+# check name: build tests/name.c (with exceptions, also its wrappers
+# tests/eh/name.c and the runtime) and compare
 fn check {
 	t=tests/$1
+	objs=($t.6 rt_p9.6 libc_p9.6)
+	if(test -f tests/eh/$1.c){
+		if(! 6c -w $cflags -I shim -o tests/eh/$1.6 tests/eh/$1.c >$t.log >[2=1]){
+			echo $1: 6c FAILED on tests/eh/$1.c
+			sed 5q $t.log
+		}
+		objs=($objs tests/eh/$1.6 eh_rt.6)
+	}
 	if(! 6c -w $cflags -I shim -o $t.6 $t.c >$t.log >[2=1]){
 		echo $1: 6c FAILED
 		grep -v '^warning' $t.log | sed 5q
 		fail=($fail $1)
 	}
-	if not if(! 6l $ldflags -o $t.out $t.6 rt_p9.6 libc_p9.6 >$t.log >[2=1]){
+	if not if(! 6l $ldflags -o $t.out $objs >$t.log >[2=1]){
 		echo $1: 6l FAILED
 		sed 5q $t.log
 		fail=($fail $1)
@@ -57,6 +66,7 @@ fn check {
 date
 6c -w $cflags rt_p9.c || exit rt_p9.c
 6c -w $cflags libc_p9.c || exit libc_p9.c
+6c -w $cflags -I shim eh_rt.c || exit eh_rt.c
 for(f in tests/*.c)
 	check `{basename $f .c}
 echo $#pass passed, $#fail failed

@@ -1,5 +1,5 @@
 diff --git a/lib/Target/CBackend/CBackend.cpp b/lib/Target/CBackend/CBackend.cpp
-index 8d57096..da54988 100644
+index 8d57096..bdb88cc 100644
 --- a/lib/Target/CBackend/CBackend.cpp
 +++ b/lib/Target/CBackend/CBackend.cpp
 @@ -52,6 +52,14 @@ namespace llvm_cbe {
@@ -193,3 +193,14 @@ index 8d57096..da54988 100644
    case Intrinsic::bswap:
    case Intrinsic::ctlz:
    case Intrinsic::ctpop:
+@@ -5522,7 +5602,9 @@ void CWriter::printGEPExpression(Value *Ptr, unsigned NumOperands,
+       writeOperand(Ptr);
+       Out << ")->field" << cast<ConstantInt>(I.getOperand())->getZExtValue()
+           << ')';
+-      // Eat the struct index
++      // Eat the struct index. What follows indexes into that field's
++      // type: an array field must get ->array[i], not [i].
++      IntoT = I.getIndexedType();
+       ++I;
+       Out << ')';
+     } else {

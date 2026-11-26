@@ -656,25 +656,158 @@ c_perror(char *s)
 }
 
 /*
- * Functions returning long or size_t: Plan 9's own return a 32-bit long.
+ * errno.  Plan 9 has none; glibc's <errno.h> makes errno *__errno_location(),
+ * and translated code compares it with Linux's values.
  */
+
+enum
+{
+	Erange	= 34,	/* Linux ERANGE */
+};
+
+static int	cerrno;
+
+int*
+__errno_location(void)
+{
+	return &cerrno;
+}
+
+/*
+ * strtol and friends.  Plan 9's strtol returns a 32-bit long, and none of
+ * them report overflow through errno, which libc++ (std::stoi) relies on.
+ * glibc 2.38 headers redirect them to __isoc23_ names in C23 mode.
+ */
+
+static int
+digit(int c, int base)
+{
+	int v;
+
+	if(c >= '0' && c <= '9')
+		v = c - '0';
+	else if(c >= 'a' && c <= 'z')
+		v = c - 'a' + 10;
+	else if(c >= 'A' && c <= 'Z')
+		v = c - 'A' + 10;
+	else
+		return -1;
+	if(v >= base)
+		return -1;
+	return v;
+}
+
+/*
+ * Convert s in base (0: by prefix) to an unsigned magnitude, at most max;
+ * set *neg.  On overflow return max and set errno.  *e is the end, or s
+ * if there are no digits.
+ */
+static uvlong
+cstrtou(char *s, char **e, int base, uvlong max, int *neg)
+{
+	char *p, *start;
+	uvlong n;
+	int v, over;
+
+	p = s;
+	while(*p == ' ' || (*p >= '\t' && *p <= '\r'))
+		p++;
+	*neg = 0;
+	if(*p == '-' || *p == '+')
+		*neg = *p++ == '-';
+	if((base == 0 || base == 16) && p[0] == '0' && (p[1] == 'x' || p[1] == 'X') && digit(p[2], 16) >= 0){
+		p += 2;
+		base = 16;
+	}else if(base == 0)
+		base = *p == '0' ? 8 : 10;
+
+	start = p;
+	n = 0;
+	over = 0;
+	for(; (v = digit(*p, base)) >= 0; p++){
+		if(n > (max - v) / base)
+			over = 1;
+		else
+			n = n*base + v;
+	}
+	if(e != nil)
+		*e = p == start ? s : p;
+	if(over){
+		cerrno = Erange;
+		return max;
+	}
+	return n;
+}
+
+static vlong
+cstrtoll(char *s, char **e, int base)
+{
+	uvlong n, max;
+	int neg;
+
+	max = (uvlong)1 << 63;	/* the magnitude of the most negative value */
+	n = cstrtou(s, e, base, max, &neg);
+	if(!neg && n == max){
+		cerrno = Erange;
+		return max - 1;
+	}
+	if(neg)
+		return -n;
+	return n;
+}
+
+static uvlong
+cstrtoull(char *s, char **e, int base)
+{
+	uvlong n;
+	int neg;
+
+	n = cstrtou(s, e, base, ~(uvlong)0, &neg);
+	if(neg)
+		return -n;
+	return n;
+}
 
 vlong
 c_strtol(char *s, char **e, int base)
 {
-	return strtoll(s, e, base);
+	return cstrtoll(s, e, base);
 }
 
 uvlong
 c_strtoul(char *s, char **e, int base)
 {
-	return strtoull(s, e, base);
+	return cstrtoull(s, e, base);
 }
 
 vlong
 c_atol(char *s)
 {
-	return strtoll(s, nil, 10);
+	return cstrtoll(s, nil, 10);
+}
+
+vlong
+__isoc23_strtol(char *s, char **e, int base)
+{
+	return cstrtoll(s, e, base);
+}
+
+vlong
+__isoc23_strtoll(char *s, char **e, int base)
+{
+	return cstrtoll(s, e, base);
+}
+
+uvlong
+__isoc23_strtoul(char *s, char **e, int base)
+{
+	return cstrtoull(s, e, base);
+}
+
+uvlong
+__isoc23_strtoull(char *s, char **e, int base)
+{
+	return cstrtoull(s, e, base);
 }
 
 vlong
@@ -807,9 +940,11 @@ c_exit(int status)
 }
 
 int	c_main(int, char**);
+void	__p9_ctors(void);	/* static constructors, emitted by lower.py */
 
 void
 main(int argc, char **argv)
 {
+	__p9_ctors();
 	c_exit(c_main(argc, argv));
 }
