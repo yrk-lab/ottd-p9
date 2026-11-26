@@ -376,3 +376,8 @@ Next steps now (replace section 10's first two items):
   uLong 32-bit on Plan 9 -> z_stream ABI mismatch with the LP64 translated code; gz* on APE stdio). liblzma DROPPED
   for now (no Plan 9 port found). Consequence: upstream regression/test.sav is OTTX (xz): convert it once with the
   stock build to an uncompressed save and gate all builds from that copy; disable LibLZMA in ref and p9 builds alike.
+- REVISED (user, 2026-11-26): zlib NOW, liblzma LATER (not dropped). Taste check (current zlib vs xz 5.8.4): zlib 15 files
+  ~24k lines, C89, no config.h, no threads/SIMD; liblzma 94 files ~42k lines, generated config.h (77 HAVE_*/TUKLIB_*),
+  mt encoder/decoder, CLMUL CRC with cpuid + __attribute__((target)), SSE2 memcmplen, ARM64 CRC (all switchable off).
+  zlib = cheap proof for a 3rd-party C lib; liblzma needed for OTTX (default) saves; zlib for OTTZ, BaNaNaS .tar.gz
+  content and .gz readmes. Justification table in phase2/README.md and PLAN.md.

@@ -35,7 +35,7 @@ comes with libc++abi's typeinfo code, which the exception runtime needs anyway.
 ## Phases and gates
 0. **Feasibility** (toy C++ incl. STL through the pipeline, run on Linux). Gate: outputs identical to native build. *(this harness)*
 1. **Dedicated server, no graphics.** `OPTION_DEDICATED=ON`, no threads, no ICU/harfbuzz/freetype/fontconfig/curl/SDL/fluidsynth.
-   zlib translated with the program, liblzma dropped for now (Phase 2 decision); libc++, threads and filesystem: see below.
+   zlib translated with the program, liblzma later (Phase 2 decision); libc++, threads and filesystem: see below.
    Exceptions and RTTI stay (see Pipeline). **Threads: no OpenTTD patch.** The runtime's `pthread_create` fails;
    libc++'s `std::thread` throws `std::system_error`, OpenTTD's `StartNewThread` catches it and every caller runs the
    work inline (link graph jobs, saving, the game loop); mutexes stay and become no-ops in a single-threaded runtime.
@@ -56,8 +56,11 @@ comes with libc++abi's typeinfo code, which the exception runtime needs anyway.
    Status (2026-11-26, `phase2/`): the translated OpenTTD, split into 32 units (`phase2/split.py`), compiles with goken
    6c without errors; 6l lacks 140 C-library symbols (`phase2/missing.txt`: zlib/liblzma, stdio, locale, wide chars,
    float math, pthreads, OS, sockets). No symbol hashing needed: kencc takes names up to 1500 chars, OpenTTD's longest is 626.
-   zlib is translated with the program (9front's APE libz is 1.2.2 with a 32-bit uLong, a different z_stream ABI);
-   liblzma is dropped for now (no Plan 9 port; the gate's xz regression save gets converted once by the stock build).
+   zlib is translated with the program now (9front's APE libz is 1.2.2 with a 32-bit uLong, a different z_stream ABI);
+   liblzma follows later, configured down (no Plan 9 port; until then the gate's xz regression save is converted once
+   by the stock build). zlib first because it is the lighter, cleaner library (plain C89, no config, threads or SIMD;
+   liblzma needs a 77-switch config.h and has threads, CLMUL/cpuid and SSE2 paths to turn off), while liblzma is what
+   reads modern saves. Comparison and reasons: `phase2/README.md`.
 3. **Video driver.** `src/video/plan9_v.cpp` (translated C++) + small hand-written C shim on libdraw (initdraw, loadimage,
    mouse/keyboard, eresized). Start as split processes (game under APE, native frontend over a pipe), merge later if wanted.
    Built-in sprite font, null sound, 32bpp-optimized blitter, OpenGFX base set.
