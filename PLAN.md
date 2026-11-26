@@ -27,7 +27,7 @@ stub scripting and make every upstream bump re-port them. Instead the IR is lowe
 small C runtime implements the Itanium `__cxa_*` ABI with setjmp/longjmp: each `__invoke_<sig>` wrapper (generated per
 signature by `phase0/eh/mkinvoke.py`) pushes a frame and setjmps, a throw longjmps to the innermost frame, and cleanups
 and handlers stay ordinary code, so destructors run. Catch matching uses libc++abi's own typeinfo classes (translated).
-Cost: a setjmp per call site that has a cleanup or handler. Proven by `phase0/tests_eh` (throw/catch, class hierarchies
+Cost: a setjmp per call site that has a cleanup or handler. Proven by `phase0/tests/e1-e5` (throw/catch, class hierarchies
 and pointer adjustment, unwinding with RAII, rethrow, libc++'s own exceptions, OpenTTD-like patterns): identical to
 native on gcc, goken 6c and **real 9front**. **RTTI** stays on too (about 80 `dynamic_cast`s, mostly window code): it
 comes with libc++abi's typeinfo code, which the exception runtime needs anyway.

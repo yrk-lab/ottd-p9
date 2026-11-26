@@ -9,11 +9,10 @@ same number of ticks, give byte-identical saves with the stock build.
 ./setup.sh              # once: clone the tag, export src-ref (no .git, shared .ottdrev), OpenGFX
 ./build_ref.sh          # stock reference build (system gcc, libstdc++): work/build-ref/openttd
 ./prep.sh               # src-p9 = src-ref + patches/series
-./build_p9.sh           # clang 17 + libc++ (exceptions, RTTI on): the target, work/build-libcxx/openttd
-./build_p9.sh noexc     # -fno-exceptions -fno-rtti: diagnostic, lists the exception and RTTI sites
+./build_p9.sh           # clang 17 + libc++, exceptions and RTTI on: work/build-p9/openttd
 ./gate.sh run work/build-ref/openttd ref
-./gate.sh run work/build-libcxx/openttd libcxx
-./gate.sh cmp ref libcxx
+./gate.sh run work/build-p9/openttd p9
+./gate.sh cmp ref p9
 ./mkpatch.sh name file...   # save edits in src-p9 as patches/name.patch
 ```
 

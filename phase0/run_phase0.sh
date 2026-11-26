@@ -1,17 +1,21 @@
 #!/bin/bash
 # run_phase0 [test...]
-#	Phase 0 gate: tests/*.cpp -> LLVM IR -> llvm-cbe -> C -> gcc
-#	(standing in for the Plan 9 compiler) -> run.  The output must
-#	equal that of the native clang build.  Logs in out/test/.
+#	Phase 0 gate: tests/*.cpp (C++20, exceptions, RTTI) -> LLVM IR
+#	+ libc++/libc++abi IR -> internalize, globaldce -> exception
+#	lowering -> llvm-cbe -> gcc (standing in for the Plan 9 compiler)
+#	with eh/eh_rt.c and the generated wrappers -> run.  The output
+#	must equal that of the native clang build.  Logs in out/test/.
 set -uo pipefail
 . "$(dirname "$0")/common.sh"
+
+lib=$out/libcxx.ll
 
 # The native reference build must link, or every test would fail
 # for reasons that have nothing to do with the translator.
 preflight()
 {
 	printf '#include <cstdio>\nint main(){std::puts("ok");}\n' >"$out/pre.cpp"
-	if ! clang++-17 --target=$triple -std=c++20 -stdlib=libc++ "$out/pre.cpp" -o "$out/pre" >"$out/pre.log" 2>&1; then
+	if ! clang++-17 $cxxflags "$out/pre.cpp" -o "$out/pre" >"$out/pre.log" 2>&1; then
 		tail -5 "$out/pre.log" >&2
 		fatal "cannot link a plain clang++ -stdlib=libc++ program; try:
 	sudo apt-get install -y clang-17 libc++-17-dev libc++abi-17-dev libunwind-17-dev"
@@ -29,9 +33,9 @@ step()
 # compare: run both builds, compare output and exit status
 compare()
 {
-	"$d/t.ref" >"$d/ref.out"
+	"$d/t.ref" >"$d/ref.out" 2>&1
 	echo rc=$? >>"$d/ref.out"
-	"$d/t.cbe" >"$d/cbe.out"
+	"$d/t.cbe" >"$d/cbe.out" 2>&1
 	echo rc=$? >>"$d/cbe.out"
 	cmp "$d/ref.out" "$d/cbe.out"
 }
@@ -43,16 +47,19 @@ check()
 	d=$out/$1
 	mkdir -p "$d"
 	step clang clang++-17 $cxxflags -S -emit-llvm "$src" -o "$d/t.ll" &&
-	step link llvm-link "$d/t.ll" "$out/libcxx_min.ll" -S -o "$d/all.ll" &&
-	step prune opt-17 -passes=internalize,globaldce --internalize-public-api-list=main "$d/all.ll" -S -o "$d/pruned.ll" &&
-	step cbe "$cbe" "$d/pruned.ll" -o "$d/t.cbe.c" &&
-	step cc gcc -w -O1 -std=gnu11 "$d/t.cbe.c" "$top/rt.c" -o "$d/t.cbe" &&
-	step ref clang++-17 --target=$triple -std=c++20 -stdlib=libc++ -fno-exceptions -fno-rtti -O1 "$src" -o "$d/t.ref" &&
+	step link llvm-link "$d/t.ll" "$lib" -S -o "$d/all.ll" &&
+	step prune opt-17 -passes=internalize,globaldce --internalize-public-api-list=main,eh_can_catch \
+		"$d/all.ll" -S -o "$d/pruned.ll" &&
+	step lower lowereh "$d/pruned.ll" "$d/eh.ll" "$d/invoke.c" &&
+	step cbe "$cbe" "$d/eh.ll" -o "$d/t.cbe.c" &&
+	step cc gcc -w -O1 -std=gnu11 -I"$top/eh" -I"$top/eh/unix" \
+		"$d/t.cbe.c" "$d/invoke.c" "$top/eh/eh_rt.c" "$top/rt.c" -o "$d/t.cbe" &&
+	step ref clang++-17 $cxxflags "$src" -o "$d/t.ref" &&
 	step run compare
 }
 
 mkdir -p "$out"
-[ -f "$out/libcxx_min.ll" ] || "$top/build_libcxx.sh" || exit 1
+[ -f "$lib" ] || "$top/build_libcxx.sh" || exit 1
 preflight
 
 tests=${*:-$(cd "$top/tests" && ls *.cpp | sed 's/\.cpp$//')}

@@ -17,14 +17,14 @@ triple=${triple:-x86_64-unknown-linux-gnu}	# Phase 2+: a Plan 9 triple
 
 PATH=/usr/lib/llvm-17/bin:$PATH
 
-# The language mode the OpenTTD build will use.  -fno-exceptions makes
-# try/catch a hard error: cbe's LowerInvokePass would otherwise drop
-# the handlers silently.
-cxxflags="--target=$triple -std=c++20 -stdlib=libc++ -fno-exceptions -fno-rtti -O1 -g0 -D_LIBCPP_DISABLE_EXTERN_TEMPLATE"
+# The language mode the OpenTTD build will use: C++20 with exceptions
+# and RTTI.  Exceptions are lowered in the IR (lowereh) and run on the
+# setjmp/longjmp runtime in eh/.
+cxxflags="--target=$triple -std=c++20 -stdlib=libc++ -O1 -g0 -D_LIBCPP_DISABLE_EXTERN_TEMPLATE"
 cflags="--target=$triple -std=gnu11 -fgnu89-inline -O1 -g0 -w"
 
 # parts of libc++ that are not header-only
-libcxxsrcs="string hash charconv algorithm memory ryu/d2fixed ryu/d2s ryu/f2s"
+libcxxsrcs="string hash charconv algorithm memory variant optional ryu/d2fixed ryu/d2s ryu/f2s"
 
 fatal()
 {
@@ -38,4 +38,16 @@ gokenpath()
 	[ -x "$goken/ROOT/arch/boot-gcc/bin/6c" ] || fatal "no goken9cc in $goken: run plan9/setup_goken.sh"
 	PATH=$goken/bin:$goken/ROOT/arch/boot-gcc/bin:$PATH
 	export objtype=amd64
+}
+
+# lowereh in.ll out.ll invoke.c: Emscripten-style exception lowering.
+# Invokes become calls through __invoke_<sig> wrappers (generated into
+# invoke.c) and a test of __THREW__; see eh/eh_rt.h.  The wrappers are
+# plain C functions and there are no threads: drop cc99, thread_local.
+lowereh()
+{
+	opt-17 -wasm-lower-em-ehsjlj -enable-emscripten-cxx-exceptions "$1" -S -o - |
+		sed 's/ thread_local / /; s/ cc99 / /' >"$2" &&
+	[ -s "$2" ] &&
+	python3 "$top/eh/mkinvoke.py" <"$2" >"$3"
 }

@@ -1,6 +1,6 @@
-/* Minimal C++ runtime shim for translated code (Phase 0).
- * Symbols use the Itanium-mangled names the translated C refers to.
- * With -fno-exceptions -fno-rtti nothing else is needed for plain classes/STL. */
+/* Minimal C++ runtime shim for translated code (Phase 0, gcc stand-in for the Plan 9 compiler).
+ * Symbols use the Itanium-mangled names the translated C refers to.  Exceptions are eh/eh_rt.c;
+ * the std exception classes and typeinfo come from libc++abi, translated with the program. */
 #include <stdlib.h>
 #include <stdio.h>
 void *_Znwm(unsigned long n)            { void *p = malloc(n ? n : 1); if (!p) abort(); return p; } /* operator new(size_t)   */
@@ -19,12 +19,3 @@ int __atomic_compare_exchange_8(volatile void *p, void *expected, uint64_t desir
 	volatile uint64_t *q = p; uint64_t *e = expected; (void)s; (void)f;
 	if (*q == *e) { *q = desired; return 1; } *e = *q; return 0;
 }
-/* std::exception key functions (libc++abi normally provides these; stubbed because exceptions are off).
- * With exceptions (-DEH, run_eh.sh) libc++abi's own are translated with the program. */
-#ifndef EH
-void _ZNSt9exceptionD2Ev(void *t)  { (void)t; }
-void _ZNSt9exceptionD1Ev(void *t)  { (void)t; }
-void _ZNSt9exceptionD0Ev(void *t)  { free(t); }
-const char *_ZNKSt9exception4whatEv(void *t) { (void)t; return "std::exception"; }
-void _ZNSt8bad_castD2Ev(void *t)   { (void)t; }
-#endif
