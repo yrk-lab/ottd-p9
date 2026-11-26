@@ -358,3 +358,21 @@ Next steps now (replace section 10's first two items):
 - Known: sadd/ssub.with.overflow helpers add in signed C (UB, fine at -O0); gcc -O1 on the 132 MB file untested.
 - Next: Phase 2 (C on Plan 9): split openttd.c for 6c memory, lower.py at scale, symbol-name hashing (mangled names up
   to hundreds of chars), Plan 9 runtime for externals.txt, data files on 9front.
+
+=== 17. PHASE 1 CLOSED; PHASE 2 STARTED (2026-11-26) ===
+- GitHub: #3 closed (Done), Phase 2 is issue #4 (In Progress).
+- Plan 9 C: cbe -cbe-explicit-padding eh.ll + lower.py --libc: 137 MB, 21,909 functions. lower.py preamble now also
+  includes shim limits.h (LP64 values) and setjmp.h (Plan 9 jmp_buf; glibc's storage is bigger); shim math.h declares
+  all float/double functions used.
+- goken 6c on the WHOLE file works (6 min, 3.4 GB). phase2/split.py: header (all static prototypes -> global, also the
+  early ones cbe prints next to types; globals extern), data.c, fnNNN.c ~4 MB -> 32 units, 45 s with 4 jobs, no errors.
+- kencc NSYMB = 1500 (goken and 9front cc.h); goken 6c segfaults beyond ~1500-char names; OpenTTD max 626 -> NO symbol
+  hashing needed (drop it from the plan; maybe later only to shrink sources).
+- 6l stops after ~20 errors ("too many errors"): build9.sh computes the missing set with goken nm: 140 symbols
+  (phase2/missing.txt). goken PATH shadows xargs/tr/comm (use /usr/bin/...; goken comm segfaulted).
+- phase2/build9.sh: whole flow in ~2.25 min.
+- Next: zlib + liblzma into the phase1 IR link; Plan 9 runtime for the rest (categories in phase2/README.md).
+- DECISION (user, 2026-11-26): zlib translated WITH the program (current release; 9front APE libz = zlib 1.2.2 from gs,
+  uLong 32-bit on Plan 9 -> z_stream ABI mismatch with the LP64 translated code; gz* on APE stdio). liblzma DROPPED
+  for now (no Plan 9 port found). Consequence: upstream regression/test.sav is OTTX (xz): convert it once with the
+  stock build to an uncompressed save and gate all builds from that copy; disable LibLZMA in ref and p9 builds alike.

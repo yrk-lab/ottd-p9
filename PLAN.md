@@ -35,7 +35,7 @@ comes with libc++abi's typeinfo code, which the exception runtime needs anyway.
 ## Phases and gates
 0. **Feasibility** (toy C++ incl. STL through the pipeline, run on Linux). Gate: outputs identical to native build. *(this harness)*
 1. **Dedicated server, no graphics.** `OPTION_DEDICATED=ON`, no threads, no ICU/harfbuzz/freetype/fontconfig/curl/SDL/fluidsynth.
-   Build zlib + liblzma yourself; libc++ without threads/localization/filesystem (patch OpenTTD's `std::filesystem` use).
+   zlib translated with the program, liblzma dropped for now (Phase 2 decision); libc++, threads and filesystem: see below.
    Exceptions and RTTI stay (see Pipeline). **Threads: no OpenTTD patch.** The runtime's `pthread_create` fails;
    libc++'s `std::thread` throws `std::system_error`, OpenTTD's `StartNewThread` catches it and every caller runs the
    work inline (link graph jobs, saving, the game loop); mutexes stay and become no-ops in a single-threaded runtime.
@@ -51,8 +51,13 @@ comes with libc++abi's typeinfo code, which the exception runtime needs anyway.
    (100000 ticks). `phase1/externals.txt`: the 216 functions/data the program needs from outside (stdio, math,
    sockets, dl*, signals, zlib, liblzma, locale): the OS layer Phase 2 has to provide on Plan 9. Gate (`phase1/gate.sh`): the same savegames, run the same number of ticks,
    give byte-identical saves vs the stock upstream build. OpenTTD 15.3; clang 17 + libc++ already matches stock gcc.
-2. **Compile the C on Plan 9.** Primary path (proven small by Phase 0.5): a Plan 9 dialect mode in llvm-cbe (what `lower.py` does today + explicit padding)
-   + symbol-name hashing. Old gcc under APE is only a fallback. Gate: dedicated server runs natively on 9front amd64 (QEMU).
+2. **Compile the C on Plan 9.** Primary path (proven small by Phase 0.5): a Plan 9 dialect mode in llvm-cbe (what `lower.py` does today + explicit padding).
+   Old gcc under APE is only a fallback. Gate: dedicated server runs natively on 9front amd64 (QEMU).
+   Status (2026-11-26, `phase2/`): the translated OpenTTD, split into 32 units (`phase2/split.py`), compiles with goken
+   6c without errors; 6l lacks 140 C-library symbols (`phase2/missing.txt`: zlib/liblzma, stdio, locale, wide chars,
+   float math, pthreads, OS, sockets). No symbol hashing needed: kencc takes names up to 1500 chars, OpenTTD's longest is 626.
+   zlib is translated with the program (9front's APE libz is 1.2.2 with a 32-bit uLong, a different z_stream ABI);
+   liblzma is dropped for now (no Plan 9 port; the gate's xz regression save gets converted once by the stock build).
 3. **Video driver.** `src/video/plan9_v.cpp` (translated C++) + small hand-written C shim on libdraw (initdraw, loadimage,
    mouse/keyboard, eresized). Start as split processes (game under APE, native frontend over a pipe), merge later if wanted.
    Built-in sprite font, null sound, 32bpp-optimized blitter, OpenGFX base set.

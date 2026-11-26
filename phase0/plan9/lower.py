@@ -55,6 +55,6 @@ if LIBC:
     ident = re.compile(r"\b(" + "|".join(RENAMED) + r")\b")
     parts = re.split(r'("(?:\\.|[^"\\])*")', s)
     s = "".join(p if i % 2 else ident.sub(r"c_\1", p) for i, p in enumerate(parts))
-sys.stdout.write("#include <stdint.h>\n#include <math.h>\n#include <stdarg.h>\ntypedef unsigned char bool;\n"
+sys.stdout.write("#include <stdint.h>\n#include <limits.h>\n#include <math.h>\n#include <stdarg.h>\n#include <setjmp.h>\ntypedef unsigned char bool;\n"
                  "#define __UNALIGNED_LOAD__(type, align, op) (*(type*)(op))\n"
                  "void abort(void);\n#define __builtin_unreachable() for(;;) abort()\n#define __builtin_trap() abort()\n" + s)
