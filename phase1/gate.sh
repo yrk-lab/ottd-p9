@@ -11,7 +11,9 @@
 #	world		new game from seed $seed (map generation, towns,
 #			industries, economy)
 #	regression	upstream's regression/regression/test.sav,
-#			loaded without AIs (its vehicles keep running)
+#			loaded without AIs (its vehicles keep running);
+#			upstream's is xz-compressed and the builds have no
+#			liblzma: work/regression.sav is it uncompressed (unxz.py)
 set -uo pipefail
 . "$(dirname "$0")/common.sh"
 
@@ -46,7 +48,10 @@ play()
 	local game=(-g)
 	case $s in
 	world)		game=(-G "$seed" -g) ;;
-	regression)	game=(-g "$ref/regression/regression/test.sav") ;;
+	regression)
+		[ -f "$work/regression.sav" ] ||
+			python3 "$top/unxz.py" "$ref/regression/regression/test.sav" "$work/regression.sav" || return 1
+		game=(-g "$work/regression.sav") ;;
 	esac
 
 	XDG_DATA_HOME=$d/data XDG_CONFIG_HOME=$d/config \

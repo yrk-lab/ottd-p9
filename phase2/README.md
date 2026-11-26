@@ -52,6 +52,17 @@ Why zlib first (a comparison of current zlib and xz 5.8.4):
 | SIMD, CPU detection | none in the core | CLMUL CRC with cpuid and `__attribute__((target))`, SSE2 in memcmplen.h, ARM64 CRC: each must be switched off, or it becomes vector code the translator cannot take |
 | style | plain portable C89 | C99 with many platform switches |
 
+Why zlib, which is C already, still goes through the pipeline (clang -> IR -> cbe -> lower.py -> 6c) instead
+of being compiled by 6c from its own sources: there is nothing to translate from C++, but compiling it natively
+would split the program into two ABIs. The translated OpenTTD is compiled for LP64 and lays out z_stream with
+64-bit uLong fields (total_in, total_out, adler); zlib compiled by 6c has a 32-bit uLong (Plan 9's long), so the
+two sides would disagree on the struct, the same problem as 9front's APE libz. And zlib's gz* functions call
+open/read/lseek/close with POSIX flags and types: in the pipeline those go through the same Plan 9 shims as
+OpenTTD's own POSIX calls, natively they would reach Plan 9 libc directly. Compiling it natively would mean
+patching zconf.h (64-bit uLong and z_off_t) and writing Plan 9 wrappers for its file calls: a small zlib-specific
+port to maintain, outside the phase 1 gate. Through the pipeline it costs 15 more units in phase1/translate.sh,
+no patches, one integer model for the whole program, and the Linux gate checks it with OpenTTD.
+
 zlib is the cheap, low-risk proof that a third-party C library goes through the translator. What each one
 gives OpenTTD: liblzma reads and writes `OTTX` saves, the default format for years, so most saves people have
 (and upstream's `regression/test.sav`) need it; zlib reads old `OTTZ` saves, unpacks downloaded content

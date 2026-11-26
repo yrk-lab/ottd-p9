@@ -60,7 +60,9 @@ comes with libc++abi's typeinfo code, which the exception runtime needs anyway.
    liblzma follows later, configured down (no Plan 9 port; until then the gate's xz regression save is converted once
    by the stock build). zlib first because it is the lighter, cleaner library (plain C89, no config, threads or SIMD;
    liblzma needs a 77-switch config.h and has threads, CLMUL/cpuid and SSE2 paths to turn off), while liblzma is what
-   reads modern saves. Comparison and reasons: `phase2/README.md`.
+   reads modern saves. zlib goes through the whole pipeline although it is C already: compiled natively by 6c it
+   would have a 32-bit uLong (a different z_stream than the LP64 program uses) and its gz* calls would bypass the
+   POSIX shims. Comparison and reasons: `phase2/README.md`.
 3. **Video driver.** `src/video/plan9_v.cpp` (translated C++) + small hand-written C shim on libdraw (initdraw, loadimage,
    mouse/keyboard, eresized). Start as split processes (game under APE, native frontend over a pipe), merge later if wanted.
    Built-in sprite font, null sound, 32bpp-optimized blitter, OpenGFX base set.

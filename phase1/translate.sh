@@ -1,7 +1,8 @@
 #!/bin/bash
 # translate [step...]
 #	OpenTTD through the translator, into work/tr:
-#	ir	every unit of build-p9 (compile_commands.json) to LLVM bitcode
+#	ir	every unit of build-p9 (compile_commands.json) and zlib to
+#		LLVM bitcode
 #	link	link them, with what they need of the libc++/libc++abi IR
 #		archive (phase0 linkcxx), into one module; internalize
 #		everything but main; drop dead code
@@ -31,10 +32,23 @@ step()
 	do_$1 || fatal "$1 failed"
 }
 
+# zlib's library sources, translated with the program (see ../phase2/README.md)
+zlibsrcs="adler32 compress crc32 deflate gzclose gzlib gzread gzwrite infback inffast inflate inftrees trees uncompr zutil"
+
 do_ir()
 {
+	local f
 	[ -f "$work/build-p9/compile_commands.json" ] || fatal "no compile_commands.json: run build_p9.sh"
-	python3 "$top/ir.py" "$work/build-p9/compile_commands.json" "$tr/ir"
+	[ -d "$zlib" ] || fatal "no $zlib: run setup.sh"
+	python3 "$top/ir.py" "$work/build-p9/compile_commands.json" "$tr/ir" || return 1
+	mkdir -p "$tr/ir/zlib"
+	for f in $zlibsrcs; do
+		# as zlib's configure would on Linux
+		clang-17 $cflags -DHAVE_UNISTD_H -DHAVE_STDARG_H -I"$zlib" -c -emit-llvm \
+			"$zlib/$f.c" -o "$tr/ir/zlib/$f.bc" || return 1
+		echo "$tr/ir/zlib/$f.bc" >>"$tr/ir/units.txt"
+	done
+	echo "zlib: $(echo $zlibsrcs | wc -w) units"
 }
 
 do_link()
@@ -64,7 +78,7 @@ do_cc()
 {
 	gcc -w ${ccopt:--O0} -std=gnu11 -fno-builtin -I"$p0/eh" -I"$p0/eh/unix" \
 		"$tr/openttd.c" "$tr/invoke.c" "$p0/eh/eh_rt.c" "$p0/rt.c" "$top/nothreads.c" \
-		-lz -llzma -lm -o "$tr/openttd" 2>&1 | grep -v 'warning:' | head -40
+		-lm -o "$tr/openttd" 2>&1 | grep -v 'warning:' | head -40
 	[ -x "$tr/openttd" ] || return 1
 	# the data OpenTTD finds next to its executable (languages, scripts,
 	# media), from the native build of the same source

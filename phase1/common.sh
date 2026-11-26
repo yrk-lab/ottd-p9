@@ -15,6 +15,8 @@ p9=$work/src-p9			# with patches/series applied
 data=$work/data			# XDG_DATA_HOME for test runs: baseset
 
 opengfx=7.1
+zlibtag=v1.3.1			# the system's version, so native and translated builds agree
+zlib=$work/zlib			# its sources, translated with the program
 
 PATH=/usr/lib/llvm-17/bin:$PATH
 

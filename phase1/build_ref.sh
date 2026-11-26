@@ -3,7 +3,8 @@
 #	The reference: stock OpenTTD (src-ref) as upstream builds it on
 #	Linux (system compiler, libstdc++, exceptions, threads), dedicated
 #	server only.  Libraries the Plan 9 build will not have are left
-#	out (they do not affect the simulation): only zlib and liblzma.
+#	out (they do not affect the simulation): only zlib.  No liblzma for
+#	now, as in the translated build (see ../phase2/README.md).
 set -euo pipefail
 . "$(dirname "$0")/common.sh"
 
@@ -13,6 +14,7 @@ cmake -S "$ref" -B "$b" -G Ninja -Wno-dev \
 	-DCMAKE_BUILD_TYPE=Release \
 	-DOPTION_DEDICATED=ON \
 	-DCMAKE_DISABLE_FIND_PACKAGE_LZO=ON \
+	-DCMAKE_DISABLE_FIND_PACKAGE_LibLZMA=ON \
 	-DCMAKE_DISABLE_FIND_PACKAGE_PNG=ON \
 	-DCMAKE_DISABLE_FIND_PACKAGE_CURL=ON \
 	-DCMAKE_DISABLE_FIND_PACKAGE_unofficial-breakpad=ON \

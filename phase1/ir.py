@@ -10,8 +10,9 @@
 #	(-mlong-double-64; no x87 80-bit type on Plan 9), not position
 #	independent (-fno-pic -fno-pie: for PIC, LLVM makes relative lookup
 #	tables, which are no C constants), and a fixed target.
-#	Units already compiled and newer than their source are skipped,
-#	unless the translator's flags changed (outdir/flags.txt).
+#	Units already compiled with the same command and newer than their
+#	source are skipped (the command is kept in outdir/<path>.cmd), unless
+#	the translator's flags changed (outdir/flags.txt).
 #	Only the openttd executable's units: not the unit tests
 #	(openttd_test, which has its own main).  The list of units is
 #	written to outdir/units.txt.
@@ -83,14 +84,20 @@ def main():
 		rel = f.split("/src/", 1)[-1] if "/src/" in f else os.path.basename(f)
 		out = os.path.join(outdir, rel + ".bc")
 		units.append(out)
-		if same and os.path.exists(out) and os.path.getmtime(out) > os.path.getmtime(f):
-			continue
 		os.makedirs(os.path.dirname(out), exist_ok=True)
-		work.append((e, convert(e, out, outdir)))	# here: header() copies files, not in parallel
+		cmd = convert(e, out, outdir)	# here: header() copies files, not in parallel
+		cmdfile = out[:-3] + ".cmd"
+		text = " ".join(cmd)
+		if same and os.path.exists(out) and os.path.getmtime(out) > os.path.getmtime(f) and \
+		   os.path.exists(cmdfile) and open(cmdfile).read() == text:
+			continue
+		work.append((e, cmd, cmdfile, text))
 
 	def run(job):
-		e, cmd = job
+		e, cmd, cmdfile, text = job
 		p = subprocess.run(cmd, cwd=e["directory"], capture_output=True, text=True)
+		if p.returncode == 0:
+			open(cmdfile, "w").write(text)
 		return e["file"], p.returncode, p.stderr
 
 	failed = 0
