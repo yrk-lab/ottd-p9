@@ -8,14 +8,12 @@
 set -uo pipefail
 . "$(dirname "$0")/common.sh"
 
-lib=$out/libcxx.ll
-
 # The native reference build must link, or every test would fail
 # for reasons that have nothing to do with the translator.
 preflight()
 {
 	printf '#include <cstdio>\nint main(){std::puts("ok");}\n' >"$out/pre.cpp"
-	if ! clang++-17 $cxxflags "$out/pre.cpp" -o "$out/pre" >"$out/pre.log" 2>&1; then
+	if ! clang++-17 $cxxflags $nativeld "$out/pre.cpp" -o "$out/pre" >"$out/pre.log" 2>&1; then
 		tail -5 "$out/pre.log" >&2
 		fatal "cannot link a plain clang++ -stdlib=libc++ program; try:
 	sudo apt-get install -y clang-17 libc++-17-dev libc++abi-17-dev libunwind-17-dev"
@@ -47,19 +45,19 @@ check()
 	d=$out/$1
 	mkdir -p "$d"
 	step clang clang++-17 $cxxflags -S -emit-llvm "$src" -o "$d/t.ll" &&
-	step link llvm-link "$d/t.ll" "$lib" -S -o "$d/all.ll" &&
+	step link linkcxx "$d/all.bc" "$d/t.ll" &&
 	step prune opt-17 -passes=internalize,globaldce --internalize-public-api-list=main,eh_can_catch \
-		"$d/all.ll" -S -o "$d/pruned.ll" &&
+		"$d/all.bc" -S -o "$d/pruned.ll" &&
 	step lower lowereh "$d/pruned.ll" "$d/eh.ll" "$d/invoke.c" &&
 	step cbe "$cbe" "$d/eh.ll" -o "$d/t.cbe.c" &&
-	step cc gcc -w -O1 -std=gnu11 -I"$top/eh" -I"$top/eh/unix" \
-		"$d/t.cbe.c" "$d/invoke.c" "$top/eh/eh_rt.c" "$top/rt.c" -o "$d/t.cbe" &&
-	step ref clang++-17 $cxxflags "$src" -o "$d/t.ref" &&
+	step cc gcc -w -O1 -std=gnu11 -fno-builtin -I"$top/eh" -I"$top/eh/unix" \
+		"$d/t.cbe.c" "$d/invoke.c" "$top/eh/eh_rt.c" "$top/rt.c" -lm -o "$d/t.cbe" &&
+	step ref clang++-17 $cxxflags $nativeld "$src" -o "$d/t.ref" &&
 	step run compare
 }
 
 mkdir -p "$out"
-[ -f "$lib" ] || "$top/build_libcxx.sh" || exit 1
+[ -f "$libir/stamp" ] || "$top/build_libcxx.sh" || exit 1
 preflight
 
 tests=${*:-$(cd "$top/tests" && ls *.cpp | sed 's/\.cpp$//')}

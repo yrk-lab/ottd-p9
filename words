@@ -325,3 +325,36 @@ Next steps now (replace section 10's first two items):
 - p9check.sh: shims rebuilt when eh/*.h, eh/plan9/*.h change.
 - Results: phase 0 9/9 (gcc), goken 14/14, CompCert 23/24, REAL 9FRONT 38/38 (f1 on a real Plan 9 fs via u9fs).
 - Next: translate the OpenTTD dedicated build itself (whole-program IR from the build, EH lowering, cbe, lower.py).
+
+=== 16. OPENTTD TRANSLATED: PHASE 1 GATE PASSED (2026-11-26) ===
+- phase1/translate.sh (steps ir link lower cbe cc) -> work/tr/openttd. gate.sh: world + regression byte-identical to stock.
+  485 units (openttd_lib + main; openttd_test excluded), 29.7k symbols, 216 externals (phase1/externals.txt = Plan 9 OS
+  layer to-do), openttd.c 3.87M lines / 132 MB; cbe 9 s; gcc -O0 2.5 min, 5 GB RSS; 100k ticks 13 s (stock -O3 ~4 s).
+- Translator flags now (phase0/common.sh cxxflags, ir.py extra): -O1 -g0 -mlong-double-64 -fno-pic -fno-pie
+  -D_LIBCPP_DISABLE_EXTERN_TEMPLATE -D_LIBCPP_HAS_NO_INT128 (+ -DFMT_USE_INT128=0 -U_FORTIFY_SOURCE for OpenTTD).
+  Native reference builds link with -no-pie (nativeld). gcc stand-in uses -fno-builtin -lm. build-p9: no SSE
+  (-DCMAKE_DISABLE_FIND_PACKAGE_SSE=ON -DSSE_FOUND=OFF; cached SSE_FOUND needs the explicit OFF), compile_commands
+  exported, HOST_BINARY_DIR for strgen/settingsgen. ir.py: no PCH (clang auto-uses x.hxx.pch for -include x.hxx: copy
+  the header elsewhere, sequentially), rebuild all when flags change (flags.txt), units.txt.
+- libc++ IR is now an ARCHIVE (phase0/out/libcxx-ir/*.bc, build_libcxx.sh) linked by phase0/arlink.py (linkcxx):
+  modules pulled only when they define a needed symbol; global_ctors otherwise drag iostream/locale into everything
+  (llvm-link --only-needed does NOT drop appending globals). eh_can_catch always needed. Sources added: iostream, ios,
+  ios.instantiations, locale, regex, mutex(+_destructor), condition_variable(+_destructor), thread, chrono, future.
+- cbe fixes (patch regenerated): constant-expression GEP gets its source type (cast); freeze -> operand; is.fpclass,
+  load.relative, threadlocal.address helpers in their own branch (neither int nor FP group); unsigned MIN prints 0;
+  umul/smul.with.overflow inline (no LLVMMul_*); zero-length arrays: [0 x T] GEP source casts to T*, a trailing one is a
+  flexible member T f[] (6c accepts; middle ones stay omitted, 6c rejects [0]); <setjmp.h> included when (sig)setjmp/
+  (sig)longjmp used, longjmp arg cast; math fns with pointer params use <math.h> prototypes; CONSTANT LHS OF A >32-BIT
+  SHIFT IS CAST (was "1 << c" as int: broke OpenTTD integer parsing -> infinite loop in ParseIntList); llvm.abs operand
+  signed (was unsigned: abs never negated -> world generation differed).
+- mkinvoke.py: odd int widths (i24 -> next std type), byval calls specialized (__invoke_*_bv<md5>, declared with byval,
+  struct passed by value; named struct layouts parsed from the module, arrays in structs), struct cache key bug fixed.
+- Runtime additions: __cxa_thread_atexit, nothrow new, std::nothrow, __throw_bad_alloc, std::uncaught_exception,
+  __cxa_guard_* (rt.c, rt_p9.c, eh_rt.c).
+- Debug method that worked: build the lowered IR directly with clang (objcopy --redefine-syms for cbe-mangled wrapper
+  names) -> identical to stock => bug is in cbe; then gdb on the cbe build compiled with ccopt="-O0 -g".
+- New tests: phase0/tests/b1_bits.cpp (64-bit constant shifts, abs), c1_charconv.cpp. Phase 0 11/11, goken 16/16,
+  CompCert 23/24, real 9front 40/40.
+- Known: sadd/ssub.with.overflow helpers add in signed C (UB, fine at -O0); gcc -O1 on the 132 MB file untested.
+- Next: Phase 2 (C on Plan 9): split openttd.c for 6c memory, lower.py at scale, symbol-name hashing (mangled names up
+  to hundreds of chars), Plan 9 runtime for externals.txt, data files on 9front.

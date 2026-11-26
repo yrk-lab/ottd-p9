@@ -239,6 +239,13 @@ __cxa_uncaught_exceptions(void)
 	return thrown != NULL;
 }
 
+/* std::uncaught_exception() */
+int
+_ZSt18uncaught_exceptionv(void)
+{
+	return thrown != NULL;
+}
+
 void*
 __cxa_current_exception_type(void)
 {

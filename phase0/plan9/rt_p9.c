@@ -28,6 +28,30 @@ _Znam(uvlong n)
 	return _Znwm(n);
 }
 
+/* operator new(size_t, const std::nothrow_t&) and new[] */
+void*
+_ZnwmRKSt9nothrow_t(uvlong n, void*)
+{
+	return malloc(n ? n : 1);
+}
+
+void*
+_ZnamRKSt9nothrow_t(uvlong n, void*)
+{
+	return malloc(n ? n : 1);
+}
+
+/* std::nothrow */
+char	_ZSt7nothrow;
+
+/* std::__throw_bad_alloc(): out of memory */
+void
+_ZSt17__throw_bad_allocv(void)
+{
+	fprint(2, "out of memory\n");
+	abort();
+}
+
 /* operator delete(void*) */
 void
 _ZdlPv(void *p)
@@ -66,6 +90,13 @@ __cxa_pure_virtual(void)
 /* static destructors are not run */
 int
 __cxa_atexit(void (*)(void*), void*, void*)
+{
+	return 0;
+}
+
+/* thread_local destructors are not run either (one thread) */
+int
+__cxa_thread_atexit(void (*)(void*), void*, void*)
 {
 	return 0;
 }

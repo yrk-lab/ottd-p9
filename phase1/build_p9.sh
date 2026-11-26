@@ -7,6 +7,9 @@
 #	No threads: nothreads.c makes pthread_create fail, so OpenTTD's
 #	StartNewThread falls back to running the work inline, as it will
 #	on Plan 9.
+#	No SSE (Plan 9 compilers have no vector types): the blitters are
+#	not part of the simulation.  compile_commands.json is exported for
+#	translate.sh, which recompiles every unit to LLVM IR.
 #	The build-time tools strgen and settingsgen run on Linux and are
 #	never translated: they are taken from the reference build
 #	(HOST_BINARY_DIR, upstream's cross-compiling mechanism).
@@ -30,7 +33,9 @@ cmake -S "$p9" -B "$b" -G Ninja -Wno-dev \
 	-DCMAKE_DISABLE_FIND_PACKAGE_PNG=ON \
 	-DCMAKE_DISABLE_FIND_PACKAGE_CURL=ON \
 	-DCMAKE_DISABLE_FIND_PACKAGE_unofficial-breakpad=ON \
-	-DCMAKE_DISABLE_FIND_PACKAGE_Grfcodec=ON >"$log"
+	-DCMAKE_DISABLE_FIND_PACKAGE_Grfcodec=ON \
+	-DCMAKE_DISABLE_FIND_PACKAGE_SSE=ON -DSSE_FOUND=OFF \
+	-DCMAKE_EXPORT_COMPILE_COMMANDS=ON >"$log"
 if ! ninja -C "$b" -k 0 openttd >>"$log" 2>&1; then
 	grep -c 'error:' "$log" | sed 's/^/errors: /'
 	fatal "build failed; log in $log"

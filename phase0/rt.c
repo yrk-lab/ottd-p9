@@ -23,3 +23,10 @@ int __atomic_compare_exchange_8(volatile void *p, void *expected, uint64_t desir
 int  __cxa_guard_acquire(uint64_t *g) { return *(volatile char *)g == 0; }
 void __cxa_guard_release(uint64_t *g) { *(volatile char *)g = 1; }
 void __cxa_guard_abort(uint64_t *g)   { (void)g; }
+/* operator new(size_t, const std::nothrow_t&), std::nothrow, std::__throw_bad_alloc (out of memory: abort) */
+void *_ZnwmRKSt9nothrow_t(unsigned long n, const void *t) { (void)t; return malloc(n ? n : 1); }
+void *_ZnamRKSt9nothrow_t(unsigned long n, const void *t) { (void)t; return malloc(n ? n : 1); }
+const char _ZSt7nothrow = 0;
+void _ZSt17__throw_bad_allocv(void) { fputs("out of memory\n", stderr); abort(); }
+/* thread_local destructors are not run (one thread, like static ones above) */
+int  __cxa_thread_atexit(void (*f)(void *), void *a, void *d) { (void)f; (void)a; (void)d; return 0; }

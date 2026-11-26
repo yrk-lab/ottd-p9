@@ -44,7 +44,12 @@ comes with libc++abi's typeinfo code, which the exception runtime needs anyway.
    the rest of libc++; `phase0/plan9/libc_p9.c` provides the POSIX calls it makes (stat, opendir/readdir, mkdir, remove,
    rename, getcwd, realpath, strerror_r, ...) on Plan 9's dirstat/dirread/dirwstat/create, with glibc's x86-64 struct
    layouts and Linux errno values. libc++ is configured without `__int128` (`_LIBCPP_HAS_NO_INT128`), which Plan 9
-   compilers lack. `phase0/tests/f1_filesystem.cpp` (the operations OpenTTD uses) is identical to native on real 9front. Gate (`phase1/gate.sh`): the same savegames, run the same number of ticks,
+   compilers lack. `phase0/tests/f1_filesystem.cpp` (the operations OpenTTD uses) is identical to native on real 9front.
+   **Translated build: GATE PASSED (2026-11-26).** `phase1/translate.sh`: all 485 units to IR (compile_commands.json,
+   translator flags), archive-style link with the libc++/libc++abi IR, exception lowering, llvm-cbe (one 3.9M-line,
+   132 MB C file), gcc as the stand-in C compiler. The saves are byte-identical to the stock build in both scenarios
+   (100000 ticks). `phase1/externals.txt`: the 216 functions/data the program needs from outside (stdio, math,
+   sockets, dl*, signals, zlib, liblzma, locale): the OS layer Phase 2 has to provide on Plan 9. Gate (`phase1/gate.sh`): the same savegames, run the same number of ticks,
    give byte-identical saves vs the stock upstream build. OpenTTD 15.3; clang 17 + libc++ already matches stock gcc.
 2. **Compile the C on Plan 9.** Primary path (proven small by Phase 0.5): a Plan 9 dialect mode in llvm-cbe (what `lower.py` does today + explicit padding)
    + symbol-name hashing. Old gcc under APE is only a fallback. Gate: dedicated server runs natively on 9front amd64 (QEMU).

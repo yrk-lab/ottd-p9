@@ -14,6 +14,9 @@ same number of ticks, give byte-identical saves with the stock build.
 ./gate.sh run work/build-p9/openttd p9
 ./gate.sh cmp ref p9
 ./mkpatch.sh name file...   # save edits in src-p9 as patches/name.patch
+./translate.sh          # OpenTTD through the translator: work/tr/openttd (ir link lower cbe cc)
+./gate.sh run work/tr/openttd tr
+./gate.sh cmp ref tr
 ```
 
 The gate (`gate.sh`) runs each scenario with the null video driver (one thread, no network, as fast
@@ -37,4 +40,12 @@ Status 2026-11-26: clang 17 + libc++, exceptions and RTTI on, no threads, gives 
 libstdc++ with threads (both scenarios). Host tools (strgen, settingsgen) come from the reference build via
 `HOST_BINARY_DIR`. `patches/series` is still empty: std::filesystem needs no patch either (libc++'s implementation is
 translated; Plan 9 POSIX shims in ../phase0/plan9/libc_p9.c, tested by ../phase0/tests/f1_filesystem.cpp on 9front).
-Next: translating the OpenTTD build itself.
+
+**Translated build (2026-11-26): gate passed.** `translate.sh` recompiles every unit of build-p9 to LLVM IR
+(`ir.py`: build flags from compile_commands.json, plus -O1 -g0 -mlong-double-64 -fno-pic -fno-pie, no _FORTIFY_SOURCE,
+no __int128 in libc++ and fmt, no precompiled header), links them with what they need of the libc++/libc++abi IR
+(28 of 36 modules: iostreams, locale, regex, thread etc. are used), lowers exceptions, runs llvm-cbe (3.9M lines,
+132 MB of C, 9 s) and compiles that with gcc -O0 (2.5 min, 5 GB) with the phase0 runtime and nothreads.c. Both
+scenarios give byte-identical saves with stock; 100000 ticks take 13 s (stock -O3: 4 s). `externals.txt` lists what
+the program needs from the C library and zlib/liblzma: the Plan 9 runtime's to-do list for Phase 2.
+The same IR compiled directly by clang (no cbe) is identical too, which is how the cbe bugs were isolated.

@@ -14,10 +14,14 @@
 #	__invoke_<sig>(fn, args...)	call fn(args...) under a setjmp frame;
 #				if it throws, set __THREW__ and return 0
 #	__cxa_find_matching_catch_<n>	collect the n-2 catch types for eh_match
-#	Names are mangled as llvm-cbe does (CBEMangle), and literal struct
-#	types ({ ptr, i8 }) get a C struct with the LLVM layout: explicit
-#	padding, packed, as cbe -cbe-explicit-padding lays out its own.
+#	A call that passes a struct by value (a byval pointer argument, which
+#	llvm-cbe passes as a struct value) gets its own wrapper too, declared
+#	with the same byval parameters, that passes the struct on by value.
+#	Names are mangled as llvm-cbe does (CBEMangle), and struct types
+#	(literal { ptr, i8 } or named %T) get a C struct with the LLVM layout:
+#	explicit padding, packed, as cbe -cbe-explicit-padding lays out its own.
 #	See eh_rt.h.
+import hashlib
 import re
 import sys
 
@@ -31,7 +35,8 @@ scalars = {	# IR type: C type, size and alignment on x86-64
 	"float": ("float", 4),
 	"double": ("double", 8),
 }
-structs = {}	# IR literal struct type: (C name, size, align)
+structs = {}	# IR struct type: (C name, size, align)
+named = {}	# %name: its definition, from the module
 decls = []	# C struct definitions, in order
 
 def mangle(name):
@@ -55,30 +60,57 @@ def ctype(t):
 	if t in scalars:
 		c, n = scalars[t]
 		return (c, n, n)
+	m = re.match(r"i(\d+)$", t)
+	if m and int(m.group(1)) <= 64:
+		# odd widths (i24: a 3-byte struct returned in a register) are
+		# the next standard type, as llvm-cbe prints them
+		for c, n in scalars.values():
+			if c.startswith("unsigned") and n * 8 >= int(m.group(1)):
+				return (c, n, n)
 	if t.startswith("{") and t.endswith("}"):
 		return struct(t)
+	if t.startswith("<{") and t.endswith("}>"):
+		return struct(t, packed=True)
+	if t.startswith("%"):
+		if t not in named or named[t] == "opaque":
+			sys.exit("mkinvoke: no definition of %s" % t)
+		d = named[t]
+		return struct(d[1:-1], packed=True, key=t) if d.startswith("<") else struct(d, key=t)
 	sys.exit("mkinvoke: unsupported IR type in a wrapper: %r" % t)
 
-def struct(t):
-	if t in structs:
-		return structs[t]
-	fields = [ctype(f) for f in split(t[1:-1])]
+# a field: (C type, size, align, array suffix)
+def field(t):
+	t = clean(t)
+	m = re.match(r"\[(\d+) x (.*)\]$", t)
+	if m:
+		c, n, a, sub = field(m.group(2))
+		return (c, n * int(m.group(1)), a, "[%s]%s" % (m.group(1), sub))
+	c, n, a = ctype(t)
+	return (c, n, a, "")
+
+def struct(t, packed=False, key=None):
+	key = key or t
+	if key in structs:
+		return structs[key]
+	fields = [field(f) for f in split(t.strip()[1:-1])]
 	name = "struct eh_s%d" % len(structs)
 	body, off, align = [], 0, 1
-	for i, (c, n, a) in enumerate(fields):
+	for i, (c, n, a, sub) in enumerate(fields):
+		if packed:
+			a = 1
 		pad = -off % a
 		if pad:
 			body.append("\tunsigned char\tpad%d[%d];\n" % (i, pad))
 			off += pad
-		body.append("\t%s\tf%d;\n" % (c, i))
+		body.append("\t%s\tf%d%s;\n" % (c, i, sub))
 		off += n
 		align = max(align, a)
 	if -off % align:
 		body.append("\tunsigned char\tpadtail[%d];\n" % (-off % align))
 		off += -off % align
 	decls.append("%s\n{\n%s};\n" % (name, "".join(body)))
-	structs[t] = (name, off, align)
-	return structs[t]
+	structs[key] = (name, off, align)
+	return structs[key]
 
 def split(params):
 	ps, depth, cur = [], 0, ""
@@ -95,6 +127,10 @@ def split(params):
 	if cur.strip():
 		ps.append(cur)
 	return [p.strip() for p in ps]
+
+def byvaltype(a):
+	m = re.search(r'\bbyval\((%"[^"]*"|%[-\w.]+|<?\{.*?\}>?)\)', a)
+	return m.group(1) if m else None
 
 # nfixed: for a specialized variadic wrapper, the number of the
 # callee's fixed parameters; the rest are passed through "..."
@@ -153,6 +189,11 @@ if len(sys.argv) != 4:
 	sys.exit("usage: mkinvoke lowered.ll fixed.ll invoke.c")
 lines = open(sys.argv[1]).readlines()
 
+for l in lines:
+	m = re.match(r'(%"[^"]+"|%[-\w.]+) = type (.*?)\s*$', l)
+	if m:
+		named[m.group(1)] = m.group(2)
+
 # drop sret(<type>) attributes
 sretre = re.compile(r'\s*\bsret\((%"[^"]*"|%[-\w.]+|\{[^}]*\}|\[[^\]]*\]|[\w.]+)\)')
 lines = [sretre.sub("", l) for l in lines]
@@ -174,6 +215,28 @@ for i, line in enumerate(lines):
 lines = [l for l in lines if not re.match(r'declare .*@"?__invoke_[^"(]*\.\.\."?\(', l)]
 for spec, (ret, fixed, extra) in variadic.items():
 	lines.append('declare %s @"%s"(%s)\n' % (ret, spec, ", ".join(fixed + extra)))
+
+# specialize the calls that pass structs by value (byval)
+byval = {}	# specialized name: (ret, params with byval attributes)
+bvre = re.compile(r'call (\S.*?) @"?(__invoke_[^"(]+)"?\((.*)\)([^)]*)$')
+for i, line in enumerate(lines):
+	if "byval(" not in line or "__invoke_" not in line:
+		continue
+	m = bvre.search(line)
+	if not m:
+		continue
+	ret, name, args, rest = m.groups()
+	args = split(args)
+	params = []
+	for a in args:
+		t = byvaltype(a)
+		params.append("ptr byval(%s)" % t if t else argtype(a))
+	sig = "_".join(typename(p) for p in params)
+	spec = "%s_bv%s" % (name, hashlib.md5(sig.encode()).hexdigest()[:8])
+	byval[spec] = (ret, params)
+	lines[i] = line[:m.start()] + 'call %s @"%s"(%s)%s\n' % (ret, spec, ", ".join(args), rest.rstrip("\n"))
+for spec, (ret, params) in byval.items():
+	lines.append('declare %s @"%s"(%s)\n' % (ret, spec, ", ".join(params)))
 open(sys.argv[2], "w").writelines(lines)
 
 funcs = []
@@ -185,6 +248,10 @@ for line in lines:
 	seen.add(m.group(2))
 	if m.group(3):
 		funcs.append(findcatch(m.group(2), int(m.group(3))))
+	elif m.group(2) in byval:
+		ret, params = byval[m.group(2)]
+		params = [byvaltype(p) or p for p in params]	# byval: the struct itself
+		funcs.append(invoke(mangle(m.group(2)), ret, params))
 	elif m.group(2) in variadic:
 		ret, fixed, extra = variadic[m.group(2)]
 		funcs.append(invoke(mangle(m.group(2)), ret, fixed + extra, len(fixed) - 1))

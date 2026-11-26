@@ -35,7 +35,6 @@ src=$(realpath "$1")
 srcdir=$(dirname "$src")
 name=$(basename "${src%.*}")
 d=$out/p9/$name
-lib=$out/libcxx.ll
 inc="-I$goken/include -I$goken/include/ALL -I$goken/include/arch/amd64"
 ehinc="-I$top/eh -I$top/eh/plan9"
 cpp=
@@ -65,11 +64,10 @@ shim()
 translate()
 {
 	if [ -n "$cpp" ]; then
-		[ -f "$lib" ] || fatal "no $lib: run build_libcxx.sh"
 		clang++-17 $cxxflags $xflags -S -emit-llvm "$src" -o "$d/t.ll" &&
-		llvm-link "$d/t.ll" "$lib" -S -o "$d/all.ll" &&
+		linkcxx "$d/all.bc" "$d/t.ll" &&
 		opt-17 -passes=internalize,globaldce --internalize-public-api-list=main,eh_can_catch \
-			"$d/all.ll" -S -o "$d/pruned.ll" &&
+			"$d/all.bc" -S -o "$d/pruned.ll" &&
 		lowereh "$d/pruned.ll" "$d/eh.ll" "$d/invoke.c" &&
 		"$cbe" -cbe-explicit-padding "$d/eh.ll" -o "$d/t.c"
 	else
@@ -84,9 +82,9 @@ translate()
 native()
 {
 	if [ -n "$cpp" ]; then
-		clang++-17 $cxxflags $xflags "$src" -o "$d/ref"
+		clang++-17 $cxxflags $nativeld $xflags "$src" -o "$d/ref"
 	else
-		clang-17 $cflags $xflags "$src" -o "$d/ref" -lm
+		clang-17 $cflags $nativeld $xflags "$src" -o "$d/ref" -lm
 	fi
 }
 

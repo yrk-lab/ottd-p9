@@ -6,7 +6,7 @@
 set -uo pipefail
 . "$(dirname "$0")/../common.sh"
 
-[ -f "$out/libcxx.ll" ] || "$top/build_libcxx.sh" || exit 1
+[ -f "$libir/stamp" ] || "$top/build_libcxx.sh" || exit 1
 
 pass=0
 n=0
