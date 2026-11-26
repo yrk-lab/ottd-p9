@@ -53,7 +53,11 @@ comes with libc++abi's typeinfo code, which the exception runtime needs anyway.
    give byte-identical saves vs the stock upstream build. OpenTTD 15.3; clang 17 + libc++ already matches stock gcc.
 2. **Compile the C on Plan 9.** Primary path (proven small by Phase 0.5): a Plan 9 dialect mode in llvm-cbe (what `lower.py` does today + explicit padding).
    Old gcc under APE is only a fallback. Gate: dedicated server runs natively on 9front amd64 (QEMU).
-   Status (2026-11-26, `phase2/`): the translated OpenTTD, split into 32 units (`phase2/split.py`), compiles with goken
+   Status (2026-11-26, later): the Plan 9 runtime is written (`phase0/plan9/{libc,os,rt}_p9.c`), the kencc build
+   links, and on real 9front (QEMU/KVM, `phase2/run9front.sh`) it plays both phase 1 gate scenarios with the null
+   video driver for 100000 ticks, byte-identical to the stock build. Left for the gate's dedicated server: sockets
+   (the BSD calls are failing stubs; Plan 9 dial/announce under them). Details: `phase2/README.md`.
+   Earlier (2026-11-26, `phase2/`): the translated OpenTTD, split into 32 units (`phase2/split.py`), compiles with goken
    6c without errors; 6l lacked 140 C-library symbols, 123 since zlib is translated with the program (`phase2/missing.txt`:
    stdio, locale, wide chars, float math, pthreads, OS, sockets). With zlib inside and liblzma off, the phase 1 gate
    still passes (reference, native and translated builds identical). No symbol hashing needed: kencc takes names up to 1500 chars, OpenTTD's longest is 626.

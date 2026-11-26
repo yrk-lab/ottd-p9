@@ -1,0 +1,102 @@
+#!/bin/rc
+# build.rc - build the translated OpenTTD on 9front and run it
+#	In /ottd: the units from split.py (openttd.h, data.c, fn*.c),
+#	the exception wrappers (invoke.c), the Plan 9 runtime (rt_p9.c,
+#	libc_p9.c, os_p9.c, eh_rt.c) and the headers (shim/).  Compiles
+#	every unit with this system's 6c, two at a time, links with 6l,
+#	and runs openttd -h.  With the data (lang/ etc., opengfx/ and
+#	regression.sav, staged by run9front.sh) it then plays the Phase 1
+#	gate scenarios for $ticks ticks (default 100000), leaving the exit
+#	saves in gate/world.sav and gate/regression.sav.
+rfork e
+cd /ottd
+fail=()
+date
+
+# cc file: compile, log in file.log
+fn cc {
+	if(! 6c -w -I/ottd/shim $1 >$1.log >[2=1]){
+		echo $1: 6c FAILED
+		grep -v '^warning' $1.log | sed 5q
+	}
+}
+
+n=0
+for(f in *.c){
+	cc $f &
+	n=`{echo $n + 1 | hoc}
+	if(~ $n 2){
+		wait
+		n=0
+	}
+}
+wait
+for(f in *.c){
+	o=`{echo $f | sed 's/\.c$/.6/'}
+	if(! test -f $o)
+		fail=($fail $f)
+}
+if(! ~ $#fail 0){
+	echo failed: $fail
+	exit fail
+}
+date
+if(! 6l -o openttd.out *.6 >6l.log >[2=1]){
+	echo 6l FAILED
+	sed 10q 6l.log
+	exit 6l
+}
+date
+ls -l openttd.out
+./openttd.out -h >h.txt >[2=1]
+echo openttd -h status $status
+sed 20q h.txt
+
+# play s: the Phase 1 gate scenario s (as phase1/gate.sh), in a fresh
+# personal directory gate/s; the exit save is gate/s.sav
+fn play {
+	s=$1
+	d=/ottd/gate/$s
+	rm -rf $d $d.sav
+	mkdir -p $d/data/openttd/baseset $d/config
+	bind /ottd/opengfx $d/data/openttd/baseset
+	{
+		echo '[misc]'
+		echo 'savegame_format = none'
+		echo '[gui]'
+		echo 'autosave = off'
+		echo 'autosave_on_exit = true'
+		echo '[game_creation]'
+		echo 'town_name = english'
+		echo '[ai_players]'
+		echo 'none ='
+	} >$d/openttd.cfg
+	switch($s){
+	case world
+		game=(-G $seed -g)
+	case regression
+		game=(-g /ottd/regression.sav)
+	}
+	XDG_DATA_HOME=$d/data XDG_CONFIG_HOME=$d/config ./openttd.out -x -c $d/openttd.cfg \
+		-v null:ticks^'='^$ticks -s null -m null $game >$d/log >[2=1]
+	st=$status
+	if(test -f $d/save/autosave/exit.sav){
+		cp $d/save/autosave/exit.sav $d.sav
+		echo gate/$s: done status $st
+	}
+	if not{
+		echo gate/$s: FAILED status $st
+		tail -5 $d/log
+	}
+}
+
+if(test -d /ottd/opengfx){
+	rfork n
+	if(~ $#ticks 0)
+		ticks=100000
+	seed=1234567
+	date
+	for(s in world regression)
+		play $s
+	date
+}

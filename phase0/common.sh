@@ -60,12 +60,15 @@ gokenpath()
 # Invokes become calls through __invoke_<sig> wrappers (generated into
 # invoke.c) and a test of __THREW__; see eh/eh_rt.h.  The wrappers are
 # plain C functions and there are no threads: drop cc99, thread_local.
+# Also make member-pointer calls independent of function alignment
+# (eh/pmf.py: Plan 9's linker does not align functions).
 lowereh()
 {
 	opt-17 -wasm-lower-em-ehsjlj -enable-emscripten-cxx-exceptions "$1" -S -o - |
 		sed 's/ thread_local / /; s/ cc99 / /' >"$2.em" &&
 	[ -s "$2.em" ] &&
-	python3 "$ehdir/mkinvoke.py" "$2.em" "$2" "$3"
+	python3 "$ehdir/pmf.py" "$2.em" "$2.pmf" >/dev/null &&
+	python3 "$ehdir/mkinvoke.py" "$2.pmf" "$2" "$3"
 }
 
 # linkcxx out.bc program...: link a C++ program with what it needs from

@@ -24,13 +24,22 @@ enum
 	Nbuf	= 512,		/* conversion buffer for one number */
 };
 
+/*
+ * With optimization, glibc's headers inline putc_unlocked and friends,
+ * so translated code reads a FILE's _IO_write_ptr and _IO_write_end
+ * directly and calls __overflow only when they meet.  A CFile starts with
+ * the 216 bytes of a glibc FILE, all zero: the inline code always takes
+ * the out-of-line path, which is ours.
+ */
 struct CFile
 {
+	uchar	glibc[216];
 	int	fd;
 	int	wr;		/* opened for writing */
 	int	eof;
 	int	n;		/* bytes in buf */
 	int	p;		/* read position in buf */
+	int	err;		/* ferror */
 	uchar	buf[Bufsize];
 	char	*mem;		/* snprintf: write here instead, at most memsize-1 bytes */
 	long	memsize;
@@ -65,9 +74,12 @@ struct Spec
 	int	verb;
 };
 
-static CFile	cin = { 0, 0 };
-static CFile	cout = { 1, 1 };
-static CFile	cerr = { 2, 1 };
+static void	seterrno(void);
+void	c_seterrno(void);
+
+static CFile	cin = { { 0 }, 0, 0 };
+static CFile	cout = { { 0 }, 1, 1 };
+static CFile	cerr = { { 0 }, 2, 1 };
 
 CFile	*c_stdin = &cin;
 CFile	*c_stdout = &cout;
@@ -82,8 +94,10 @@ cflush(CFile *f)
 		return 0;
 	n = f->n;
 	f->n = 0;
-	if(write(f->fd, f->buf, n) != n)
+	if(write(f->fd, f->buf, n) != n){
+		f->err = 1;
 		return -1;
+	}
 	return 0;
 }
 
@@ -532,8 +546,11 @@ static int
 cvsnprintf(char *buf, uvlong size, char *fmt, va_list arg)
 {
 	CFile f;
+	char dummy;
 	int n;
 
+	if(buf == nil)
+		buf = &dummy;	/* counting only (size 0): nothing is written */
 	f.fd = -1;
 	f.wr = 1;
 	f.n = 0;
@@ -708,6 +725,188 @@ c_perror(char *s)
 		fprint(2, "%s: %r\n", s);
 	else
 		fprint(2, "%r\n");
+}
+
+/*
+ * More stdio: binary reads, positioning, status, pushback, and glibc's
+ * out-of-line halves of its inline macros.
+ */
+
+uvlong
+c_fread(void *v, uvlong size, uvlong n, CFile *f)
+{
+	uchar *p;
+	uvlong want, got;
+	int c;
+
+	p = v;
+	want = size * n;
+	got = 0;
+	while(got < want){
+		if(f->p < f->n){
+			c = f->n - f->p;
+			if(c > want - got)
+				c = want - got;
+			memmove(p + got, f->buf + f->p, c);
+			f->p += c;
+			got += c;
+			continue;
+		}
+		c = cgetc(f);
+		if(c < 0)
+			break;
+		p[got++] = c;
+	}
+	if(size == 0)
+		return 0;
+	return got / size;
+}
+
+/* the position the caller sees: the file's, less what is buffered unread */
+vlong
+c_ftello(CFile *f)
+{
+	vlong pos;
+
+	pos = seek(f->fd, 0, 1);
+	if(pos < 0)
+		return -1;
+	if(f->wr)
+		return pos + f->n;
+	return pos - (f->n - f->p);
+}
+
+vlong
+c_ftell(CFile *f)
+{
+	return c_ftello(f);
+}
+
+int
+c_fseeko(CFile *f, vlong off, int whence)
+{
+	if(f->wr && cflush(f) < 0)
+		return -1;
+	if(!f->wr && whence == 1)
+		off -= f->n - f->p;	/* relative to what the caller has read */
+	if(!f->wr)
+		f->n = f->p = 0;
+	if(seek(f->fd, off, whence) < 0){
+		seterrno();
+		return -1;
+	}
+	f->eof = 0;
+	return 0;
+}
+
+int
+c_fseek(CFile *f, vlong off, int whence)
+{
+	return c_fseeko(f, off, whence);
+}
+
+int
+c_feof(CFile *f)
+{
+	return f->eof && f->p >= f->n;
+}
+
+int
+c_ferror(CFile *f)
+{
+	return f->err;
+}
+
+void
+c_clearerr(CFile *f)
+{
+	f->eof = 0;
+	f->err = 0;
+}
+
+int
+c_fileno(CFile *f)
+{
+	return f->fd;
+}
+
+void
+c_flockfile(CFile*)
+{
+}
+
+void
+c_funlockfile(CFile*)
+{
+}
+
+int
+c_fflush_unlocked(CFile *f)
+{
+	return c_fflush(f);
+}
+
+int
+c_ungetc(int c, CFile *f)
+{
+	if(c < 0)
+		return -1;
+	if(f->p > 0)
+		f->buf[--f->p] = c;
+	else{
+		if(f->n >= Bufsize)
+			return -1;
+		memmove(f->buf + 1, f->buf, f->n);
+		f->buf[0] = c;
+		f->n++;
+	}
+	f->eof = 0;
+	return c & 0xff;
+}
+
+/* glibc putc's slow path */
+int
+__overflow(CFile *f, int c)
+{
+	if(c < 0)
+		return cflush(f);
+	return c_putc(c, f);
+}
+
+/* wide-character stdio in the "C" locale: one byte is one character */
+int
+c_getwc(CFile *f)
+{
+	return cgetc(f);
+}
+
+int
+c_ungetwc(int c, CFile *f)
+{
+	return c_ungetc(c, f);
+}
+
+int
+c_fputwc(int c, CFile *f)
+{
+	return c_putc(c, f);
+}
+
+/* vasprintf: count, allocate, format */
+int
+c_vasprintf(char **out, char *fmt, void *ap)
+{
+	va_list a, b;
+	int n;
+
+	a = *(va_list*)ap;
+	b = a;
+	n = cvsnprintf(nil, 0, fmt, a);
+	*out = malloc(n + 1);
+	if(*out == nil)
+		return -1;
+	cvsnprintf(*out, n + 1, fmt, b);
+	return n;
 }
 
 /*
@@ -986,6 +1185,13 @@ seterrno(void)
 		cerrno = Eacces;
 	else
 		cerrno = Eio;
+}
+
+/* for os_p9.c */
+void
+c_seterrno(void)
+{
+	seterrno();
 }
 
 static void
@@ -1394,6 +1600,777 @@ __ctype_tolower_loc(void)
 	if(lowerp == nil)
 		ctypeinit();
 	return &lowerp;
+}
+
+/*
+ * scanf, from a string or a CFile: %d %i %u %o %x %X %p %c %s %[set] %n
+ * and %f %e %g (through strtod), with h hh l ll z j t L sizes, widths
+ * and assignment suppression.  Returns the number of assignments, or -1
+ * if the input ended before the first conversion.
+ */
+
+typedef struct Src Src;
+struct Src
+{
+	char	*s;		/* a string, or */
+	CFile	*f;		/* a file */
+	int	count;		/* characters read, for %n */
+};
+
+static int
+sget(Src *src)
+{
+	int c;
+
+	if(src->f != nil)
+		c = cgetc(src->f);
+	else if(*src->s == 0)
+		c = -1;
+	else
+		c = (uchar)*src->s++;
+	if(c >= 0)
+		src->count++;
+	return c;
+}
+
+static void
+sunget(Src *src, int c)
+{
+	if(c < 0)
+		return;
+	src->count--;
+	if(src->f != nil)
+		c_ungetc(c, src->f);
+	else
+		src->s--;
+}
+
+static int
+isspc(int c)
+{
+	return c == ' ' || (c >= '\t' && c <= '\r');
+}
+
+/* store an integer of the given size (as in Spec.size) */
+static void
+storeint(void *p, int size, uvlong v)
+{
+	switch(size){
+	case Schar:
+		*(uchar*)p = v;
+		break;
+	case Sshort:
+		*(ushort*)p = v;
+		break;
+	case Svlong:
+		*(uvlong*)p = v;
+		break;
+	default:
+		*(uint*)p = v;
+		break;
+	}
+}
+
+static int
+cscanf(Src *src, char *fmt, va_list arg)
+{
+	char buf[Nbuf], set[256], *e, *p;
+	int c, n, width, size, suppress, neg, base, i, inv, isdouble;
+	uvlong v;
+	double d;
+
+	n = 0;
+	for(; *fmt != 0; fmt++){
+		if(isspc(*fmt)){
+			while((c = sget(src)) >= 0 && isspc(c))
+				;
+			sunget(src, c);
+			continue;
+		}
+		if(*fmt != '%' || fmt[1] == '%'){
+			if(*fmt == '%')
+				fmt++;
+			c = sget(src);
+			if(c != (uchar)*fmt){
+				sunget(src, c);
+				return c < 0 && n == 0 ? -1 : n;
+			}
+			continue;
+		}
+		fmt++;
+		suppress = 0;
+		if(*fmt == '*'){
+			suppress = 1;
+			fmt++;
+		}
+		width = 0;
+		while(*fmt >= '0' && *fmt <= '9')
+			width = width*10 + *fmt++ - '0';
+		size = Sint;
+		isdouble = 0;
+		for(;; fmt++){
+			if(*fmt == 'h')
+				size = size == Sshort ? Schar : Sshort;
+			else if(*fmt == 'l'){
+				size = Svlong;
+				isdouble = 1;
+			}else if(*fmt == 'z' || *fmt == 'j' || *fmt == 't' || *fmt == 'q' || *fmt == 'L'){
+				size = Svlong;
+				isdouble = 1;
+			}else
+				break;
+		}
+		if(*fmt == 0)
+			break;
+		if(*fmt == 'n'){
+			if(!suppress)
+				storeint(va_arg(arg, void*), size, src->count);
+			continue;
+		}
+		if(*fmt != 'c' && *fmt != '['){
+			while((c = sget(src)) >= 0 && isspc(c))
+				;
+			sunget(src, c);
+		}
+		if(width == 0)
+			width = *fmt == 'c' ? 1 : Nbuf - 1;
+		if(width > Nbuf - 1)
+			width = Nbuf - 1;
+		switch(*fmt){
+		case 'c':
+			p = suppress ? nil : va_arg(arg, char*);
+			for(i = 0; i < width; i++){
+				c = sget(src);
+				if(c < 0)
+					return n == 0 && i == 0 ? -1 : n;
+				if(p != nil)
+					p[i] = c;
+			}
+			if(!suppress)
+				n++;
+			break;
+		case 's':
+		case '[':
+			memset(set, 0, sizeof set);
+			inv = 0;
+			if(*fmt == 's'){
+				for(i = 0; i < 256; i++)
+					set[i] = !isspc(i);
+			}else{
+				fmt++;
+				if(*fmt == '^'){
+					inv = 1;
+					fmt++;
+				}
+				if(*fmt == ']')
+					set[(uchar)*fmt++] = 1;
+				for(; *fmt != 0 && *fmt != ']'; fmt++)
+					if(fmt[1] == '-' && fmt[2] != ']' && fmt[2] != 0){
+						for(i = (uchar)fmt[0]; i <= (uchar)fmt[2]; i++)
+							set[i] = 1;
+						fmt += 2;
+					}else
+						set[(uchar)*fmt] = 1;
+				if(*fmt == 0)
+					return n;
+				if(inv)
+					for(i = 0; i < 256; i++)
+						set[i] = !set[i];
+			}
+			p = suppress ? nil : va_arg(arg, char*);
+			for(i = 0; i < width && (c = sget(src)) >= 0; i++){
+				if(!set[c]){
+					sunget(src, c);
+					break;
+				}
+				if(p != nil)
+					p[i] = c;
+			}
+			if(i == 0)
+				return n == 0 && c < 0 ? -1 : n;
+			if(p != nil){
+				p[i] = 0;
+				n++;
+			}
+			break;
+		case 'f':
+		case 'F':
+		case 'e':
+		case 'E':
+		case 'g':
+		case 'G':
+		case 'a':
+			for(i = 0; i < width && (c = sget(src)) >= 0; i++){
+				if(!(c >= '0' && c <= '9') && c != '.' && c != 'e' && c != 'E' && c != '+' && c != '-'
+				&& c != 'x' && c != 'X' && !(c >= 'a' && c <= 'f') && !(c >= 'A' && c <= 'F')
+				&& c != 'i' && c != 'n' && c != 'N' && c != 'I'){
+					sunget(src, c);
+					break;
+				}
+				buf[i] = c;
+			}
+			buf[i] = 0;
+			d = strtod(buf, &e);
+			if(e == buf)
+				return n == 0 && i == 0 ? -1 : n;
+			if(!suppress){
+				if(isdouble)
+					*va_arg(arg, double*) = d;
+				else
+					*va_arg(arg, float*) = d;
+				n++;
+			}
+			break;
+		default:	/* d i u o x X p */
+			base = 10;
+			if(*fmt == 'o')
+				base = 8;
+			else if(*fmt == 'x' || *fmt == 'X' || *fmt == 'p'){
+				base = 16;
+				if(*fmt == 'p')
+					size = Svlong;
+			}else if(*fmt == 'i')
+				base = 0;
+			for(i = 0; i < width && (c = sget(src)) >= 0; i++){
+				if(!(c >= '0' && c <= '9') && !(c >= 'a' && c <= 'f') && !(c >= 'A' && c <= 'F')
+				&& c != 'x' && c != 'X' && !(i == 0 && (c == '-' || c == '+'))){
+					sunget(src, c);
+					break;
+				}
+				buf[i] = c;
+			}
+			buf[i] = 0;
+			neg = buf[0] == '-';
+			v = cstrtou(buf, &e, base, ~(uvlong)0, &neg);
+			if(e == buf)
+				return n == 0 && i == 0 ? -1 : n;
+			if(!suppress){
+				storeint(va_arg(arg, void*), size, neg ? -v : v);
+				n++;
+			}
+			break;
+		}
+	}
+	return n;
+}
+
+int
+__isoc23_sscanf(char *s, char *fmt, ...)
+{
+	va_list arg;
+	Src src;
+	int n;
+
+	memset(&src, 0, sizeof src);
+	src.s = s;
+	va_start(arg, fmt);
+	n = cscanf(&src, fmt, arg);
+	va_end(arg);
+	return n;
+}
+
+int
+__isoc23_vsscanf(char *s, char *fmt, void *ap)
+{
+	Src src;
+
+	memset(&src, 0, sizeof src);
+	src.s = s;
+	return cscanf(&src, fmt, *(va_list*)ap);
+}
+
+int
+__isoc23_fscanf(CFile *f, char *fmt, ...)
+{
+	va_list arg;
+	Src src;
+	int n;
+
+	memset(&src, 0, sizeof src);
+	src.f = f;
+	va_start(arg, fmt);
+	n = cscanf(&src, fmt, arg);
+	va_end(arg);
+	return n;
+}
+
+/*
+ * Single-precision math: through double, as the other float functions
+ * above.  round() is not in Plan 9 libc.
+ */
+
+float
+acosf(float x)
+{
+	return acos(x);
+}
+
+float
+asinf(float x)
+{
+	return asin(x);
+}
+
+float
+atanf(float x)
+{
+	return atan(x);
+}
+
+float
+atan2f(float y, float x)
+{
+	return atan2(y, x);
+}
+
+float
+expf(float x)
+{
+	return exp(x);
+}
+
+float
+logf(float x)
+{
+	return log(x);
+}
+
+float
+log10f(float x)
+{
+	return log10(x);
+}
+
+float
+powf(float x, float y)
+{
+	return pow(x, y);
+}
+
+float
+tanf(float x)
+{
+	return sin(x) / cos(x);	/* no tan in goken's libc */
+}
+
+
+float
+modff(float x, float *ip)
+{
+	double i, f;
+
+	f = modf(x, &i);
+	*ip = i;
+	return f;
+}
+
+/* not in goken's libc (9front has it): from sin and cos */
+double
+c_tan(double x)
+{
+	return sin(x) / cos(x);
+}
+
+/* halfway cases away from zero */
+double
+round(double x)
+{
+	if(x < 0)
+		return -floor(-x + 0.5);
+	return floor(x + 0.5);
+}
+
+/*
+ * The "C" locale, the only one: locale objects are a dummy, conversions
+ * ignore them, and the tables are glibc's layouts.
+ */
+
+enum
+{
+	Charmax	= 127,	/* CHAR_MAX: "not available" in struct lconv */
+	Isupper	= 0x0100,	/* glibc <ctype.h> bits, little-endian */
+	Islower	= 0x0200,
+	Isalpha	= 0x0400,
+	Isdigit	= 0x0800,
+	Isxdigit	= 0x1000,
+	Isspace	= 0x2000,
+	Isprint	= 0x4000,
+	Isgraph	= 0x8000,
+	Isblank	= 0x0001,
+	Iscntrl	= 0x0002,
+	Ispunct	= 0x0004,
+	Isalnum	= 0x0008,
+};
+
+ushort**	__ctype_b_loc(void);
+
+/*
+ * glibc struct __locale_struct, x86-64: libc++ reads the "C" locale's
+ * tables from it (classic_table() is __cloc()->__ctype_b).
+ */
+typedef struct Clocale Clocale;
+struct Clocale
+{
+	void	*locales[13];
+	ushort	*ctypeb;
+	int	*lowertab;
+	int	*uppertab;
+	char	*names[13];
+};
+
+static Clocale	clocale;	/* the one locale object */
+
+void*
+newlocale(int, char*, void*)
+{
+	int i;
+
+	if(clocale.ctypeb == nil){
+		clocale.ctypeb = *__ctype_b_loc();
+		clocale.lowertab = *__ctype_tolower_loc();
+		clocale.uppertab = *__ctype_toupper_loc();
+		for(i = 0; i < nelem(clocale.names); i++)
+			clocale.names[i] = "C";
+	}
+	return &clocale;
+}
+
+void
+freelocale(void*)
+{
+}
+
+/* the "previous" locale is the global one, ((locale_t)-1) */
+void*
+uselocale(void*)
+{
+	return (void*)-1;
+}
+
+/* glibc struct lconv, x86-64: 10 strings, then 14 chars */
+typedef struct Clconv Clconv;
+struct Clconv
+{
+	char	*decimal_point;
+	char	*thousands_sep;
+	char	*grouping;
+	char	*int_curr_symbol;
+	char	*currency_symbol;
+	char	*mon_decimal_point;
+	char	*mon_thousands_sep;
+	char	*mon_grouping;
+	char	*positive_sign;
+	char	*negative_sign;
+	char	frac[14];
+};
+
+static Clconv	lconv;
+
+Clconv*
+localeconv(void)
+{
+	if(lconv.decimal_point == nil){
+		lconv.decimal_point = ".";
+		lconv.thousands_sep = "";
+		lconv.grouping = "";
+		lconv.int_curr_symbol = "";
+		lconv.currency_symbol = "";
+		lconv.mon_decimal_point = "";
+		lconv.mon_thousands_sep = "";
+		lconv.mon_grouping = "";
+		lconv.positive_sign = "";
+		lconv.negative_sign = "";
+		memset(lconv.frac, Charmax, sizeof lconv.frac);
+	}
+	return &lconv;
+}
+
+/* message catalogs: none (nl_catd -1), the default text is used */
+void*
+catopen(char*, int)
+{
+	return (void*)-1;
+}
+
+char*
+catgets(void*, int, int, char *def)
+{
+	return def;
+}
+
+int
+catclose(void*)
+{
+	return 0;
+}
+
+double
+strtod_l(char *s, char **e, void*)
+{
+	return strtod(s, e);
+}
+
+float
+strtof_l(char *s, char **e, void*)
+{
+	return strtod(s, e);
+}
+
+/* long double is double (-mlong-double-64) */
+double
+strtold_l(char *s, char **e, void*)
+{
+	return strtod(s, e);
+}
+
+vlong
+__isoc23_strtoll_l(char *s, char **e, int base, void*)
+{
+	return cstrtoll(s, e, base);
+}
+
+uvlong
+__isoc23_strtoull_l(char *s, char **e, int base, void*)
+{
+	return cstrtoull(s, e, base);
+}
+
+uvlong
+__ctype_get_mb_cur_max(void)
+{
+	return 1;
+}
+
+/* glibc's classification table: unsigned short, indexed -128..255 */
+static ushort	ctypebits[384];
+static ushort	*ctypep;
+
+static void
+ctypebitsinit(void)
+{
+	int c, b;
+
+	for(c = 0; c < 128; c++){
+		b = 0;
+		if(c >= 'A' && c <= 'Z')
+			b |= Isupper | Isalpha | Isalnum | Isprint | Isgraph;
+		if(c >= 'a' && c <= 'z')
+			b |= Islower | Isalpha | Isalnum | Isprint | Isgraph;
+		if(c >= '0' && c <= '9')
+			b |= Isdigit | Isalnum | Isprint | Isgraph | Isxdigit;
+		if((c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))
+			b |= Isxdigit;
+		if(c == ' ' || (c >= '\t' && c <= '\r'))
+			b |= Isspace;
+		if(c == ' ' || c == '\t')
+			b |= Isblank;
+		if(c < 32 || c == 127)
+			b |= Iscntrl;
+		if(c >= 32 && c < 127)
+			b |= Isprint;
+		if(c > 32 && c < 127){
+			b |= Isgraph;
+			if(!(b & Isalnum))
+				b |= Ispunct;
+		}
+		ctypebits[c + 128] = b;
+	}
+	ctypep = ctypebits + 128;
+}
+
+ushort**
+__ctype_b_loc(void)
+{
+	if(ctypep == nil)
+		ctypebitsinit();
+	return &ctypep;
+}
+
+/* glibc struct tm, x86-64 */
+typedef struct Ctm Ctm;
+struct Ctm
+{
+	int	sec;
+	int	min;
+	int	hour;
+	int	mday;
+	int	mon;
+	int	year;
+	int	wday;
+	int	yday;
+	int	isdst;
+	int	pad;
+	vlong	gmtoff;
+	char	*zone;
+};
+
+static char	*wdays[] = { "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday" };
+static char	*months[] = { "January", "February", "March", "April", "May", "June", "July",
+	"August", "September", "October", "November", "December" };
+
+/* strftime in the "C" locale: the common conversions */
+uvlong
+strftime_l(char *buf, uvlong size, char *fmt, Ctm *tm, void*)
+{
+	char *p, *e, tmp[64];
+
+	p = buf;
+	e = buf + size;
+	for(; *fmt != 0 && p < e; fmt++){
+		if(*fmt != '%'){
+			*p++ = *fmt;
+			continue;
+		}
+		fmt++;
+		tmp[0] = 0;
+		switch(*fmt){
+		case 'Y': snprint(tmp, sizeof tmp, "%d", tm->year + 1900); break;
+		case 'y': snprint(tmp, sizeof tmp, "%.2d", tm->year % 100); break;
+		case 'm': snprint(tmp, sizeof tmp, "%.2d", tm->mon + 1); break;
+		case 'd': snprint(tmp, sizeof tmp, "%.2d", tm->mday); break;
+		case 'e': snprint(tmp, sizeof tmp, "%2d", tm->mday); break;
+		case 'H': snprint(tmp, sizeof tmp, "%.2d", tm->hour); break;
+		case 'M': snprint(tmp, sizeof tmp, "%.2d", tm->min); break;
+		case 'S': snprint(tmp, sizeof tmp, "%.2d", tm->sec); break;
+		case 'j': snprint(tmp, sizeof tmp, "%.3d", tm->yday + 1); break;
+		case 'a': snprint(tmp, sizeof tmp, "%.3s", wdays[tm->wday % 7]); break;
+		case 'A': snprint(tmp, sizeof tmp, "%s", wdays[tm->wday % 7]); break;
+		case 'b':
+		case 'h': snprint(tmp, sizeof tmp, "%.3s", months[tm->mon % 12]); break;
+		case 'B': snprint(tmp, sizeof tmp, "%s", months[tm->mon % 12]); break;
+		case 'p': snprint(tmp, sizeof tmp, "%s", tm->hour < 12 ? "AM" : "PM"); break;
+		case 'F': snprint(tmp, sizeof tmp, "%d-%.2d-%.2d", tm->year + 1900, tm->mon + 1, tm->mday); break;
+		case 'T': snprint(tmp, sizeof tmp, "%.2d:%.2d:%.2d", tm->hour, tm->min, tm->sec); break;
+		case 'D': snprint(tmp, sizeof tmp, "%.2d/%.2d/%.2d", tm->mon + 1, tm->mday, tm->year % 100); break;
+		case 'Z': snprint(tmp, sizeof tmp, "%s", tm->zone != nil ? tm->zone : "GMT"); break;
+		case '%': snprint(tmp, sizeof tmp, "%%"); break;
+		case 0: fmt--; break;
+		default: snprint(tmp, sizeof tmp, "%%%c", *fmt); break;
+		}
+		if(p + strlen(tmp) >= e)
+			return 0;
+		strcpy(p, tmp);
+		p += strlen(tmp);
+	}
+	if(p >= e)
+		return 0;
+	*p = 0;
+	return p - buf;
+}
+
+/*
+ * Wide characters in the "C" locale: wchar_t (glibc: 32 bits) holds one
+ * byte, and each byte is one character.
+ */
+
+uvlong
+mbrtowc(int *wc, char *s, uvlong n, void*)
+{
+	if(s == nil)
+		return 0;
+	if(n == 0)
+		return -2;
+	if(wc != nil)
+		*wc = (uchar)*s;
+	return *s != 0;
+}
+
+int
+mbtowc(int *wc, char *s, uvlong n)
+{
+	if(s == nil)
+		return 0;
+	if(n == 0)
+		return -1;
+	if(wc != nil)
+		*wc = (uchar)*s;
+	return *s != 0;
+}
+
+uvlong
+mbsnrtowcs(int *dst, char **src, uvlong nms, uvlong len, void*)
+{
+	uvlong i;
+	char *s;
+
+	s = *src;
+	for(i = 0; i < nms && (dst == nil || i < len); i++){
+		if(dst != nil)
+			dst[i] = (uchar)s[i];
+		if(s[i] == 0){
+			if(dst != nil)
+				*src = nil;
+			return i;
+		}
+	}
+	if(dst != nil)
+		*src = s + i;
+	return i;
+}
+
+uvlong
+mbsrtowcs(int *dst, char **src, uvlong len, void *ps)
+{
+	return mbsnrtowcs(dst, src, ~(uvlong)0, len, ps);
+}
+
+uvlong
+wcrtomb(char *s, int wc, void*)
+{
+	if(s == nil)
+		return 1;
+	if(wc < 0 || wc > 255){
+		cerrno = 84;	/* EILSEQ */
+		return -1;
+	}
+	*s = wc;
+	return 1;
+}
+
+uvlong
+wcsnrtombs(char *dst, int **src, uvlong nwc, uvlong len, void*)
+{
+	uvlong i;
+	int *s;
+
+	s = *src;
+	for(i = 0; i < nwc && (dst == nil || i < len); i++){
+		if(s[i] < 0 || s[i] > 255){
+			cerrno = 84;
+			return -1;
+		}
+		if(dst != nil)
+			dst[i] = s[i];
+		if(s[i] == 0){
+			if(dst != nil)
+				*src = nil;
+			return i;
+		}
+	}
+	if(dst != nil)
+		*src = s + i;
+	return i;
+}
+
+uvlong
+wcslen(int *s)
+{
+	uvlong n;
+
+	for(n = 0; s[n] != 0; n++)
+		;
+	return n;
+}
+
+int*
+wmemchr(int *s, int c, uvlong n)
+{
+	uvlong i;
+
+	for(i = 0; i < n; i++)
+		if(s[i] == c)
+			return s + i;
+	return nil;
 }
 
 /*

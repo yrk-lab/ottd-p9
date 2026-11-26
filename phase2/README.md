@@ -18,7 +18,7 @@ LLVM made module-level names unique, and C++ file-local names are mangled.
   also compiles: 6 min, 3.4 GB, too much for a small 9front VM.) The full build takes about 2¼ minutes.
 - **No symbol-name hashing needed**: kencc (goken and 9front) has `NSYMB 1500`; OpenTTD's longest identifier is
   626 characters (1,096 are over 255). goken's 6c crashes only beyond ~1,500.
-- **Links except for 140 missing symbols** (123 since zlib is inside; `missing.txt`): the Plan 9 runtime to write:
+- **Links** (since the runtime below; it lacked 140 symbols, 123 once zlib was inside). What was written:
   - zlib and liblzma (deflate, inflate, gz*, lzma_*): zlib translated with the program now, liblzma later (Next)
   - stdio: fread, fseek(o), ftell(o), feof, ferror, clearerr, fileno, ungetc, vasprintf, *scanf, flockfile...
   - locale ("C" only): newlocale/uselocale/freelocale, localeconv, catopen/catgets/catclose, strto*_l, strftime_l,
@@ -32,6 +32,42 @@ LLVM made module-level names unique, and C++ file-local names are mangled.
   - sockets: socket, bind, listen, accept, connect, send/recv(from), getaddrinfo, getnameinfo... (failing stubs
     first; Plan 9 dial/announce later)
   - 1-byte atomics
+
+## On 9front: the gate passes (2026-11-26)
+
+`run9front.sh` stages the units, the runtime and the data in the 9front root, boots 9front diskless under
+QEMU/KVM (u9fs), and `build.rc` compiles with 9front's own 6c (9 minutes, two jobs), links with 6l (6
+minutes; a 42 MB `openttd.out`), runs `openttd -h`, and plays the two gate scenarios (70 s together). The
+saves, normalized on the host, are byte-identical to the Linux builds' (`../phase1/gate.sh cmp tr 9front`):
+world and regression, 100000 ticks each. Not yet: the dedicated server (sockets are failing stubs; Plan 9
+dial/announce under the BSD calls is next), liblzma.
+
+## Plan 9 runtime: links, runs, passes the gate on goken (2026-11-26)
+
+The missing symbols are written (`../phase0/plan9`): `libc_p9.c` (stdio including fread/fseek/ungetc/
+vasprintf and scanf, the "C" locale, wide characters in the "C" locale, float math), `os_p9.c` (POSIX
+files, process, time; signals, dl*, sockets as failing stubs), `rt_p9.c` (1-byte atomics, pthreads: create
+fails as `../phase1/nothreads.c`, the rest no-ops). The link is complete: a 43 MB `openttd.exe`.
+
+The kencc build, run on Linux (goken's binaries are Linux ELF), plays both gate scenarios for 100000 ticks
+and gives saves byte-identical to the reference, native and translated Linux builds. What it took:
+
+- **Member-function pointers** (`../phase0/eh/pmf.py`): the Itanium C++ ABI marks a virtual member pointer
+  by bit 0 and assumes functions at even addresses; Plan 9's linker does not align functions, so a non-virtual
+  member function at an odd address was called through the vtable (the first crash, in `std::call_once`).
+  The test becomes "bit 0 set and below the text base" (0x200000); 130 call sites in OpenTTD.
+- **glibc locale object**: libc++'s `classic_table()` is `__cloc()->__ctype_b`, read from glibc's
+  `struct __locale_struct`; `newlocale` returns one with the classification and case tables.
+- **fmt to a FILE**: fmt's glibc path writes into the FILE's own buffer (`_IO_write_ptr` and so on), which
+  the runtime's FILE does not keep: `-DFMT_USE_FALLBACK_FILE=1` (`../phase1/ir.py`) makes it use fwrite and
+  putc. The flag is in the Linux translated build too, which still passes the gate.
+- **goken's malloc** is a placeholder (a 64 MB bump allocator; free does nothing, realloc copies the new
+  size), and its sbrk hands out unmapped memory when Linux randomizes the break: goken builds link
+  `malloc_goken.c` (power-of-two classes with free lists, on the real break). Not used on 9front, whose libc
+  has the pool allocator.
+- 9front's libc.h declares bind, listen and accept: the program's are renamed (c_bind...) with the other
+  libc shims.
+- The data directories (lang, baseset...) are linked next to openttd.exe, as for the Linux builds.
 
 ## zlib inside, liblzma off (2026-11-26)
 

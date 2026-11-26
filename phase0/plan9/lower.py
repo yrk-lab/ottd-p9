@@ -12,7 +12,11 @@ LIBC = "--libc" in sys.argv[1:]	# translated ISO C program: route libc reference
 # (long = 32 bit on Plan 9 amd64)
 RENAMED = """printf fprintf vprintf vfprintf snprintf vsnprintf putc fputc putchar fputs puts fwrite fflush fopen fclose
 getc fgetc getchar fgets perror strtol strtoul atol labs strlen exit stdin stdout stderr main
-stat lstat fstat opendir readdir closedir mkdir remove rename getcwd realpath""".split()
+stat lstat fstat opendir readdir closedir mkdir remove rename getcwd realpath
+open read write lseek dup time strerror isatty
+fread fseek fseeko ftell ftello feof ferror clearerr fileno flockfile funlockfile fflush_unlocked ungetc
+getwc ungetwc fputwc vasprintf tan
+bind listen accept""".split()
 
 # 1. Preamble: 6c has no #if.  Drop every #if..#endif block and all
 #    #includes; keep the helper function definitions.
@@ -67,6 +71,10 @@ s = re.sub(r"\bINT64_C\(\s*(-?\d+)\s*\)", lambda m: m.group(1) + "ll", s)
 #    program's.  Static destructors are not run (as with rt_p9's
 #    __cxa_atexit).
 ctors = re.findall(r"\b(\w+)\(void\)[^;\n]*__ATTRIBUTE_CTOR__\s*;", s)
+#    Constructors with an init_priority (clang names them _GLOBAL__I_<priority>,
+#    libc++'s iostreams use 100) run first, lowest priority first.
+prio = sorted((c for c in ctors if re.match(r"_GLOBAL__I_\d+$", c)), key=lambda c: int(c[11:]))
+ctors = prio + [c for c in ctors if c not in prio]
 s = re.sub(r"__ATTRIBUTE_(CTOR|DTOR)__", "", s)
 s += "\nvoid __p9_ctors(void) {\n" + "".join("  %s();\n" % c for c in dict.fromkeys(ctors)) + "}\n"
 
@@ -76,6 +84,8 @@ if LIBC:
 	ident = re.compile(r"\b(" + "|".join(RENAMED) + r")\b")
 	parts = re.split(r'("(?:\\.|[^"\\])*")', s)
 	s = "".join(p if i % 2 else ident.sub(r"c_\1", p) for i, p in enumerate(parts))
+	# glibc's setjmp is _setjmp: it must be Plan 9's setjmp itself, not a wrapper
+	s = re.sub(r"\b_setjmp\b", "setjmp", s)
 sys.stdout.write(
 	"#include <stdint.h>\n"
 	"#include <limits.h>\n"

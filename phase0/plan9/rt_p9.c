@@ -252,3 +252,183 @@ void
 __cxa_guard_abort(uvlong*)
 {
 }
+
+/*
+ * 1-byte atomics: the program is single threaded, see above.
+ */
+
+uchar
+__atomic_exchange_1(uchar *p, uchar v, int)
+{
+	uchar o;
+
+	o = *p;
+	*p = v;
+	return o;
+}
+
+uchar
+__atomic_fetch_and_1(uchar *p, uchar v, int)
+{
+	uchar o;
+
+	o = *p;
+	*p = o & v;
+	return o;
+}
+
+uchar
+__atomic_fetch_or_1(uchar *p, uchar v, int)
+{
+	uchar o;
+
+	o = *p;
+	*p = o | v;
+	return o;
+}
+
+void
+__atomic_store_1(uchar *p, uchar v, int)
+{
+	*p = v;
+}
+
+/*
+ * pthreads, single threaded.  Thread creation fails (Linux EAGAIN), as
+ * ../../phase1/nothreads.c makes it on Linux: libc++'s std::thread then
+ * throws std::system_error, OpenTTD's StartNewThread catches it and runs
+ * the work inline.  Mutexes and condition variables have nothing to wait
+ * for; thread keys are a small table.
+ */
+
+enum
+{
+	Eagain	= 11,
+	Nkeys	= 64,
+};
+
+static void	*keyval[Nkeys];
+static int	nkeys;
+
+int
+pthread_create(void*, void*, void *(*)(void*), void*)
+{
+	return Eagain;
+}
+
+int
+pthread_join(uvlong, void**)
+{
+	return 0;
+}
+
+int
+pthread_detach(uvlong)
+{
+	return 0;
+}
+
+uvlong
+pthread_self(void)
+{
+	return 1;
+}
+
+int
+pthread_setname_np(uvlong, char*)
+{
+	return 0;
+}
+
+int
+pthread_key_create(uint *key, void (*)(void*))
+{
+	if(nkeys == Nkeys)
+		return Eagain;
+	*key = nkeys++;
+	return 0;
+}
+
+int
+pthread_setspecific(uint key, void *v)
+{
+	if(key >= nkeys)
+		return 22;	/* EINVAL */
+	keyval[key] = v;
+	return 0;
+}
+
+void*
+pthread_getspecific(uint key)
+{
+	if(key >= nkeys)
+		return nil;
+	return keyval[key];
+}
+
+int
+pthread_mutex_init(void*, void*)
+{
+	return 0;
+}
+
+int
+pthread_mutex_destroy(void*)
+{
+	return 0;
+}
+
+int
+pthread_mutex_lock(void*)
+{
+	return 0;
+}
+
+int
+pthread_mutex_unlock(void*)
+{
+	return 0;
+}
+
+int
+pthread_mutexattr_init(void*)
+{
+	return 0;
+}
+
+int
+pthread_mutexattr_destroy(void*)
+{
+	return 0;
+}
+
+int
+pthread_mutexattr_settype(void*, int)
+{
+	return 0;
+}
+
+int
+pthread_cond_broadcast(void*)
+{
+	return 0;
+}
+
+int
+pthread_cond_destroy(void*)
+{
+	return 0;
+}
+
+/* no other thread can signal: waiting would never end, return at once */
+int
+pthread_cond_wait(void*, void*)
+{
+	return 0;
+}
+
+int
+pthread_cond_clockwait(void*, void*, int, void*)
+{
+	return 0;
+}

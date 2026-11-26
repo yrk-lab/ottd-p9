@@ -9,7 +9,10 @@
 #	and fmt are configured without it), long double as double
 #	(-mlong-double-64; no x87 80-bit type on Plan 9), not position
 #	independent (-fno-pic -fno-pie: for PIC, LLVM makes relative lookup
-#	tables, which are no C constants), and a fixed target.
+#	tables, which are no C constants), fmt printing to a FILE through
+#	fwrite and putc (FMT_USE_FALLBACK_FILE: its glibc path works on the
+#	FILE's internal buffer pointers, which the Plan 9 runtime does not
+#	keep), and a fixed target.
 #	Units already compiled with the same command and newer than their
 #	source are skipped (the command is kept in outdir/<path>.cmd), unless
 #	the translator's flags changed (outdir/flags.txt).
@@ -27,7 +30,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 extra = ["--target=x86_64-unknown-linux-gnu", "-O1", "-g0", "-w", "-mlong-double-64", "-fno-pic", "-fno-pie",
 	"-D_LIBCPP_DISABLE_EXTERN_TEMPLATE", "-D_LIBCPP_HAS_NO_INT128", "-DFMT_USE_INT128=0",
-	"-U_FORTIFY_SOURCE"]
+	"-DFMT_USE_FALLBACK_FILE=1", "-U_FORTIFY_SOURCE"]
 
 # a copy of a precompiled header's header, away from its .pch: clang uses
 # "x.hxx.pch" automatically when told to -include "x.hxx"

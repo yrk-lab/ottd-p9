@@ -394,3 +394,23 @@ Next steps now (replace section 10's first two items):
   .clang-format (OpenTTD-like); rt.c rewritten Plan 9 style; shim/stdint.h; lower.py and audit.py (tabs, one statement
   per line); a few long lines. Verified: same IR (C/C++, clang -g0), same AST (Python, docstring ignored), same tokens
   (C/shell wraps). Not yet: a general pass over shell scripts and the Plan 9 C files.
+- PLAN 9 RUNTIME DONE, PHASE 2 GATE (null driver) PASSES ON 9FRONT (2026-11-26). The kencc build links (no missing
+  symbols) and plays both gate scenarios for 100000 ticks on goken (Linux ELF) AND on real 9front (QEMU/KVM,
+  phase2/run9front.sh -> build.rc: 6c 9 min, 6l 6 min, both scenarios 70 s): saves byte-identical to ref/p9/tr
+  (world 6ac58f56..., regression f6d47875...). Fixes on the way:
+  * eh/pmf.py: Itanium member pointers use bit 0 = virtual and assume even function addresses; Plan 9 6l does not
+    align functions -> `(p&1) && p < 0x200000`; 130 sites. Symptom: crash in std::call_once / locale::id.
+  * libc++ classic_table() = __cloc()->__ctype_b: newlocale returns a glibc-layout struct __locale_struct
+    (Clocale in libc_p9.c; fields named lowertab/uppertab, since tolower/toupper are macros). Symptom: regex
+    ctor faulting on a garbage ctype table.
+  * fmt's glibc FILE path writes into _IO_write_ptr: ir.py adds -DFMT_USE_FALLBACK_FILE=1 (fwrite/putc). Linux
+    gate rerun: still identical.
+  * goken libc malloc = 64 MB bump allocator (free no-op, realloc copies NEW size) and goken sbrk breaks under ASLR
+    (starts at `end`; Linux brk below start_brk returns the current break = "success"): phase0/plan9/malloc_goken.c
+    (power-of-two classes, free lists, own _sysbrk), linked by build9.sh only, never on 9front.
+  * 9front libc.h has bind/listen/accept -> renamed c_* in lower.py RENAMED.
+  * data dirs (lang ai game baseset media bin) symlinked next to openttd.exe; run9front.sh copies them, OpenGFX
+    (/ottd/opengfx, bound into the personal data dir) and regression.sav, then savenorm + gate cmp tr 9front.
+  Debug recipe (goken): gdb on openttd.exe, `nm` from goken for symbols (syms.all), symbolize stack words by
+  nearest T symbol; first arg at 8(SP) on entry (goken 6c passes everything on the stack).
+  Next: dedicated server needs sockets (Plan 9 dial/announce under the BSD socket shims); liblzma; Phase 3 video.
