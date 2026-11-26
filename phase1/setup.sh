@@ -10,7 +10,8 @@ set -euo pipefail
 . "$(dirname "$0")/common.sh"
 
 mkdir -p "$work"
-sudo apt-get install -y --no-install-recommends cmake ninja-build gcc g++ zlib1g-dev liblzma-dev curl unzip >/dev/null
+sudo apt-get install -y --no-install-recommends \
+	cmake ninja-build gcc g++ zlib1g-dev liblzma-dev curl unzip >/dev/null
 
 if [ ! -d "$git" ]; then
 	git -c advice.detachedHead=false clone -q --depth 1 --branch "$tag" https://github.com/OpenTTD/OpenTTD.git "$git"

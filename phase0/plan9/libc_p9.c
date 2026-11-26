@@ -971,7 +971,8 @@ seterrno(void)
 	char e[ERRMAX];
 
 	rerrstr(e, sizeof e);
-	if(e[0] == 0 || strstr(e, "not exist") != nil || strstr(e, "No such file") != nil || strstr(e, "not found") != nil)
+	if(e[0] == 0 || strstr(e, "not exist") != nil || strstr(e, "No such file") != nil
+	|| strstr(e, "not found") != nil)
 		cerrno = Enoent;
 	else if(strstr(e, "not empty") != nil)
 		cerrno = Enotempty;

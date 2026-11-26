@@ -11,17 +11,19 @@
 #include <vector>
 
 /* saveload */
-static int state = 0;	// global the loader changes and must restore
+static int state = 0; // global the loader changes and must restore
 struct SaveState {
 	int old;
 	SaveState(int v) : old(state) { state = v; }
 	~SaveState() { state = old; }
 };
-struct LoadError { std::string msg; };
+struct LoadError {
+	std::string msg;
+};
 
 static int read_byte(const std::vector<int> &buf, size_t &pos)
 {
-	if (pos >= buf.size()) throw LoadError{ "unexpected end of savegame at " + std::to_string(pos) };
+	if (pos >= buf.size()) throw LoadError { "unexpected end of savegame at " + std::to_string(pos) };
 	return buf[pos++];
 }
 static int read_chunk(const std::vector<int> &buf, size_t &pos)
@@ -45,11 +47,24 @@ static void load(const std::vector<int> &buf)
 }
 
 /* script engine */
-struct Suspend { int ticks; };
+struct Suspend {
+	int ticks;
+};
 typedef int (*Native)(int);
-static int n_add(int x) { return x + 1; }
-static int n_sleep(int x) { if (x % 3 == 0) throw Suspend{ x }; return x; }
-static int n_fail(int x) { if (x == 7) throw std::string("script error"); return x; }
+static int n_add(int x)
+{
+	return x + 1;
+}
+static int n_sleep(int x)
+{
+	if (x % 3 == 0) throw Suspend { x };
+	return x;
+}
+static int n_fail(int x)
+{
+	if (x == 7) throw std::string("script error");
+	return x;
+}
 
 static int vm_run(const Native *prog, int len, int &pc, int acc)
 {
@@ -61,8 +76,17 @@ static int vm_run(const Native *prog, int len, int &pc, int acc)
 static std::string ctor_trace;
 struct Part {
 	char c;
-	Part(char c, bool fail) : c(c) { if (fail) throw c; ctor_trace += '+'; ctor_trace += c; }
-	~Part() { ctor_trace += '-'; ctor_trace += c; }
+	Part(char c, bool fail) : c(c)
+	{
+		if (fail) throw c;
+		ctor_trace += '+';
+		ctor_trace += c;
+	}
+	~Part()
+	{
+		ctor_trace += '-';
+		ctor_trace += c;
+	}
 };
 struct Whole {
 	Part a, b, c;
@@ -83,7 +107,7 @@ int main()
 			break;
 		} catch (const Suspend &s) {
 			resumes++;
-			pc++;	// resume after the suspending native
+			pc++; // resume after the suspending native
 		} catch (const std::string &e) {
 			printf("vm: %s at pc %d\n", e.c_str(), pc);
 			break;

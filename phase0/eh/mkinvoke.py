@@ -242,7 +242,8 @@ open(sys.argv[2], "w").writelines(lines)
 funcs = []
 seen = set()
 for line in lines:
-	m = re.match(r'declare\s+(?:[a-z_]+\s+)*?(\S.*?)\s+@"?(__invoke_[^"(]+|__cxa_find_matching_catch_(\d+))"?\((.*)\)', line)
+	m = re.match(r'declare\s+(?:[a-z_]+\s+)*?(\S.*?)\s+'
+		r'@"?(__invoke_[^"(]+|__cxa_find_matching_catch_(\d+))"?\((.*)\)', line)
 	if not m or m.group(2) in seen:
 		continue
 	seen.add(m.group(2))

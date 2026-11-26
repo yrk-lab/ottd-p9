@@ -9,11 +9,13 @@
 template <class T>
 static void parse(const char *s, int base)
 {
-	T v{};
+	T v {};
 	auto r = std::from_chars(s, s + strlen(s), v, base);
-	const char *ec = r.ec == std::errc{} ? "ok" : r.ec == std::errc::result_out_of_range ? "range" : "invalid";
+	const char *ec = r.ec == std::errc {}                     ? "ok"
+	                 : r.ec == std::errc::result_out_of_range ? "range"
+	                                                          : "invalid";
 	printf("from_chars<%d%s>(\"%s\", %d): %s len %d value %lld\n", (int)sizeof(T) * 8,
-		T(-1) < T(0) ? "s" : "u", s, base, ec, (int)(r.ptr - s), (long long)v);
+	       T(-1) < T(0) ? "s" : "u", s, base, ec, (int)(r.ptr - s), (long long)v);
 }
 
 int main()

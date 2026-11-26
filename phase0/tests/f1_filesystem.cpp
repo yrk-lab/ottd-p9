@@ -15,7 +15,10 @@ namespace fs = std::filesystem;
 static void put(const fs::path &p, const char *text)
 {
 	FILE *f = fopen(p.c_str(), "w");
-	if (f == nullptr) { printf("cannot create %s\n", p.c_str()); return; }
+	if (f == nullptr) {
+		printf("cannot create %s\n", p.c_str());
+		return;
+	}
 	fputs(text, f);
 	fclose(f);
 }
@@ -38,7 +41,7 @@ int main()
 {
 	fs::path p = "save/autosave/exit.sav";
 	printf("filename %s stem %s extension %s parent %s\n", p.filename().c_str(), p.stem().c_str(),
-		p.extension().c_str(), p.parent_path().c_str());
+	       p.extension().c_str(), p.parent_path().c_str());
 	printf("joined %s\n", (fs::path("a") / "b" / "c.txt").c_str());
 
 	fs::path root = "f1_scratch";
@@ -65,10 +68,10 @@ int main()
 
 	fs::rename(root / "a.ini.new", root / "a.ini", ec);
 	printf("rename %s, old exists %d, new exists %d\n", ec ? "error" : "ok",
-		(int)fs::exists(root / "a.ini.new"), (int)fs::exists(root / "a.ini"));
+	       (int)fs::exists(root / "a.ini.new"), (int)fs::exists(root / "a.ini"));
 	put(root / "b.ini", "old");
 	put(root / "b.ini.new", "new contents");
-	fs::rename(root / "b.ini.new", root / "b.ini", ec);	// replaces, as ini.cpp relies on
+	fs::rename(root / "b.ini.new", root / "b.ini", ec); // replaces, as ini.cpp relies on
 	printf("rename over existing %s, size %d\n", ec ? "error" : "ok", (int)fs::file_size(root / "b.ini"));
 
 	list(root);
@@ -82,7 +85,7 @@ int main()
 
 	fs::path canon = fs::weakly_canonical(root / "sub/../a.ini");
 	printf("weakly_canonical is absolute %d, ends with %s\n", (int)canon.is_absolute(),
-		canon.filename().c_str());
+	       canon.filename().c_str());
 
 	printf("remove file %d\n", (int)fs::remove(root / "sub/deeper/x.txt", ec));
 	printf("remove non-empty dir %d %s\n", (int)fs::remove(root / "sub", ec), ec ? "error" : "ok");

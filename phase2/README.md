@@ -18,7 +18,7 @@ LLVM made module-level names unique, and C++ file-local names are mangled.
   also compiles: 6 min, 3.4 GB, too much for a small 9front VM.) The full build takes about 2¼ minutes.
 - **No symbol-name hashing needed**: kencc (goken and 9front) has `NSYMB 1500`; OpenTTD's longest identifier is
   626 characters (1,096 are over 255). goken's 6c crashes only beyond ~1,500.
-- **Links except for 140 missing symbols** (`missing.txt`): the Plan 9 runtime to write:
+- **Links except for 140 missing symbols** (123 since zlib is inside; `missing.txt`): the Plan 9 runtime to write:
   - zlib and liblzma (deflate, inflate, gz*, lzma_*): zlib translated with the program now, liblzma later (Next)
   - stdio: fread, fseek(o), ftell(o), feof, ferror, clearerr, fileno, ungetc, vasprintf, *scanf, flockfile...
   - locale ("C" only): newlocale/uselocale/freelocale, localeconv, catopen/catgets/catclose, strto*_l, strftime_l,
@@ -32,6 +32,15 @@ LLVM made module-level names unique, and C++ file-local names are mangled.
   - sockets: socket, bind, listen, accept, connect, send/recv(from), getaddrinfo, getnameinfo... (failing stubs
     first; Plan 9 dial/announce later)
   - 1-byte atomics
+
+## zlib inside, liblzma off (2026-11-26)
+
+Step 1 below is done: zlib 1.3.1 is compiled to IR with OpenTTD (`../phase1/translate.sh`, 15 units, no -lz),
+liblzma is off in the reference, native and translated builds, and the gate's regression scenario starts from
+upstream's save made uncompressed (`../phase1/unxz.py`; checked against loading the xz original with an
+lzma-capable stock build: same result). The phase 1 gate passes: reference, native and translated builds give
+byte-identical saves. The translated program has 202 externals (`../phase1/externals.txt`), and the kencc
+link now lacks 123 symbols (`missing.txt`), none from zlib or liblzma.
 
 ## Next
 

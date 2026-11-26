@@ -3,16 +3,41 @@
 #include <stdio.h>
 #include <stdint.h>
 namespace ns {
-struct Base { virtual ~Base() { live--; } virtual int f(int v) const = 0; static inline int live = 0; Base() { live++; } };
-struct A : Base { int f(int v) const override { return v + 1; } };
-struct B : Base { int k; explicit B(int k) : k(k) {} int f(int v) const override { return v * k; } };
-template <typename T, int N> struct Arr { T d[N]; constexpr T &operator[](int i) { return d[i]; } constexpr int size() const { return N; } };
-template <typename F> int apply(F &&fn, int v) { return fn(v); }
-struct Guard { int *p; Guard(int *p) : p(p) { *p += 100; } ~Guard() { *p -= 1; } };
+struct Base {
+	virtual ~Base() { live--; }
+	virtual int f(int v) const = 0;
+	static inline int live = 0;
+	Base() { live++; }
+};
+struct A : Base {
+	int f(int v) const override { return v + 1; }
+};
+struct B : Base {
+	int k;
+	explicit B(int k) : k(k) {}
+	int f(int v) const override { return v * k; }
+};
+template <typename T, int N>
+struct Arr {
+	T d[N];
+	constexpr T &operator[](int i) { return d[i]; }
+	constexpr int size() const { return N; }
+};
+template <typename F>
+int apply(F &&fn, int v)
+{
+	return fn(v);
 }
-static int g_init = []{ return 7; }();            // dynamic static init
-static ns::Arr<int, 8> table = {{1,2,3,4,5,6,7,8}};
-int main() {
+struct Guard {
+	int *p;
+	Guard(int *p) : p(p) { *p += 100; }
+	~Guard() { *p -= 1; }
+};
+} // namespace ns
+static int g_init = [] { return 7; }(); // dynamic static init
+static ns::Arr<int, 8> table = { { 1, 2, 3, 4, 5, 6, 7, 8 } };
+int main()
+{
 	int counter = 0;
 	{
 		ns::Guard gd(&counter);

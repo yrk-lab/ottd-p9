@@ -30,7 +30,8 @@ cp "$tr/invoke.c" "$p9/u/invoke.c"
 
 echo "== 6c"
 cd "$p9/u"
-ls fn*.c data.c | /usr/bin/xargs -P4 -I{} sh -c "6c -w -I $p0/plan9/shim {} >{}.log 2>&1 || echo {}: 6c FAILED"
+ls fn*.c data.c |
+	/usr/bin/xargs -P4 -I{} sh -c "6c -w -I $p0/plan9/shim {} >{}.log 2>&1 || echo {}: 6c FAILED"
 6c -w -Damd64 $inc $ehinc invoke.c || fatal "invoke.c failed"
 for f in "$p0/plan9/rt_p9.c" "$p0/plan9/libc_p9.c" "$p0/eh/eh_rt.c"; do
 	6c -w -Damd64 $inc $ehinc -o "$(basename "$f" .c).6" "$f" || fatal "$f failed"

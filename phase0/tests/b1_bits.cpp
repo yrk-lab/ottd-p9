@@ -9,7 +9,7 @@ static volatile int sink;
 
 static bool is_digit_mask(unsigned char c)
 {
-	return c < 64 && ((uint64_t{1} << c) & 0x03FF000000000000ULL) != 0;
+	return c < 64 && ((uint64_t { 1 } << c) & 0x03FF000000000000ULL) != 0;
 }
 
 static bool in_set(const char *set, char c)
@@ -32,12 +32,12 @@ int main()
 
 	for (int k = 0; k < 64; k += 7) {
 		volatile int kk = k;
-		uint64_t a = uint64_t{1} << kk;
-		int64_t b = int64_t{-1} << kk;
+		uint64_t a = uint64_t { 1 } << kk;
+		int64_t b = int64_t { -1 } << kk;
 		int64_t c = INT64_MIN >> kk;
 		uint64_t d = 0x8000000000000000ULL >> kk;
-		printf("k %2d: %016llx %016llx %016llx %016llx\n", k, (unsigned long long)a,
-			(unsigned long long)b, (unsigned long long)c, (unsigned long long)d);
+		printf("k %2d: %016llx %016llx %016llx %016llx\n", k, (unsigned long long)a, (unsigned long long)b,
+		       (unsigned long long)c, (unsigned long long)d);
 	}
 	volatile long long in[] = { -5, 7, 0, -2147483647LL, -9223372036854775807LL, 123456789012LL };
 	for (long long v : in) {

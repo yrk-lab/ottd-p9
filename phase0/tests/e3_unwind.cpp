@@ -10,8 +10,18 @@ static std::string trace;
 
 struct Guard {
 	char name;
-	Guard(char n) : name(n) { live++; trace += '+'; trace += n; }
-	~Guard() { live--; trace += '-'; trace += name; }
+	Guard(char n) : name(n)
+	{
+		live++;
+		trace += '+';
+		trace += n;
+	}
+	~Guard()
+	{
+		live--;
+		trace += '-';
+		trace += name;
+	}
 };
 
 struct Step {
@@ -22,7 +32,7 @@ struct Deep : Step {
 	int run(int depth) override
 	{
 		Guard g('a' + depth);
-		std::vector<std::string> v(3, std::string(40, 'x'));	// heap memory owned by the frame
+		std::vector<std::string> v(3, std::string(40, 'x')); // heap memory owned by the frame
 		if (depth == 0) throw depth + 100;
 		return this->run(depth - 1) + 1;
 	}
@@ -48,7 +58,7 @@ static int rethrower()
 		return d.run(3);
 	} catch (int v) {
 		trace += "!caught";
-		throw;	// rethrow the same object
+		throw; // rethrow the same object
 	}
 }
 

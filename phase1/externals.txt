@@ -56,9 +56,6 @@ close
 closedir
 connect
 cosf
-deflate
-deflateEnd
-deflateInit_
 dlclose
 dlerror
 dlopen
@@ -108,14 +105,6 @@ getsockopt
 getuid
 getwc
 gmtime_r
-gzclose
-gzdopen
-gzerror
-gzread
-inflate
-inflateEnd
-inflateInit2_
-inflateInit_
 ioctl
 isatty
 listen
@@ -124,11 +113,7 @@ localtime_r
 log10f
 logf
 longjmp
-lzma_auto_decoder
-lzma_code
-lzma_easy_encoder
-lzma_end
-lzma_version_string
+lseek
 malloc
 mbrtowc
 mbsnrtowcs
@@ -163,6 +148,7 @@ pthread_mutexattr_settype
 pthread_self
 pthread_setname_np
 pthread_setspecific
+read
 readdir
 realloc
 realpath
@@ -213,4 +199,4 @@ wcrtomb
 wcslen
 wcsnrtombs
 wmemchr
-zlibVersion
+write

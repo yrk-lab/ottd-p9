@@ -384,3 +384,13 @@ Next steps now (replace section 10's first two items):
 - Why zlib goes through clang/cbe although it is C (user asked; kept): native 6c build = 32-bit uLong (z_stream
   layout differs from the LP64 program's) and gz* POSIX calls would bypass our shims; direct route would need a zconf.h
   patch + Plan 9 file-call wrappers, outside the Linux gate. Pipeline: 15 units, no patches, one ABI. In phase2/README.md.
+- zlib step DONE (2026-11-26): zlib v1.3.1 pinned (phase1/setup.sh, $zlib), compiled to IR in translate.sh do_ir
+  (cflags + -DHAVE_UNISTD_H -DHAVE_STDARG_H), no -lz/-llzma; LibLZMA disabled in build_ref and build_p9 (cmake
+  -DCMAKE_DISABLE_FIND_PACKAGE_LibLZMA=ON); ir.py recompiles when a unit's command changes (.cmd files).
+  unxz.py: OTTX -> OTTN (tag + 4-byte version + raw); work/regression.sav; verified identical result vs loading the xz
+  save with the old lzma ref. Gate: ref == p9 == tr (world 6ac58f56..., regression f6d47875...; hashes changed from the
+  lzma build, expected). Externals 202; kencc link missing 123 (phase2/missing.txt).
+- Formatting pass (user request, partly done, rest POSTPONED): C++ tests via clang-format-17 with phase0/tests{,_p9}/
+  .clang-format (OpenTTD-like); rt.c rewritten Plan 9 style; shim/stdint.h; lower.py and audit.py (tabs, one statement
+  per line); a few long lines. Verified: same IR (C/C++, clang -g0), same AST (Python, docstring ignored), same tokens
+  (C/shell wraps). Not yet: a general pass over shell scripts and the Plan 9 C files.

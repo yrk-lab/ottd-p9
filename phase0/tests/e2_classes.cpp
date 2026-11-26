@@ -2,7 +2,7 @@
 // the exception object is destroyed exactly once, multiple inheritance adjusts the pointer.
 #include <cstdio>
 
-static int live = 0;	// exception objects alive
+static int live = 0; // exception objects alive
 
 struct Error {
 	int code;
@@ -19,8 +19,11 @@ struct DiskError : IOError {
 	DiskError(int c) : IOError(c) {}
 	const char *what() const override { return "DiskError"; }
 };
-struct Tag { int tag = 77; virtual ~Tag() {} };
-struct Tagged : Tag, Error {	// Error is the second base: catching it needs a pointer adjustment
+struct Tag {
+	int tag = 77;
+	virtual ~Tag() {}
+};
+struct Tagged : Tag, Error { // Error is the second base: catching it needs a pointer adjustment
 	Tagged(int c) : Error(c) {}
 	const char *what() const override { return "Tagged"; }
 };
@@ -28,11 +31,16 @@ struct Tagged : Tag, Error {	// Error is the second base: catching it needs a po
 static void raise(int k)
 {
 	switch (k) {
-	case 0: throw Error(1);
-	case 1: throw IOError(2);
-	case 2: throw DiskError(3);
-	case 3: throw Tagged(4);
-	case 4: throw new DiskError(5);	// by pointer
+	case 0:
+		throw Error(1);
+	case 1:
+		throw IOError(2);
+	case 2:
+		throw DiskError(3);
+	case 3:
+		throw Tagged(4);
+	case 4:
+		throw new DiskError(5); // by pointer
 	}
 }
 

@@ -54,8 +54,9 @@ comes with libc++abi's typeinfo code, which the exception runtime needs anyway.
 2. **Compile the C on Plan 9.** Primary path (proven small by Phase 0.5): a Plan 9 dialect mode in llvm-cbe (what `lower.py` does today + explicit padding).
    Old gcc under APE is only a fallback. Gate: dedicated server runs natively on 9front amd64 (QEMU).
    Status (2026-11-26, `phase2/`): the translated OpenTTD, split into 32 units (`phase2/split.py`), compiles with goken
-   6c without errors; 6l lacks 140 C-library symbols (`phase2/missing.txt`: zlib/liblzma, stdio, locale, wide chars,
-   float math, pthreads, OS, sockets). No symbol hashing needed: kencc takes names up to 1500 chars, OpenTTD's longest is 626.
+   6c without errors; 6l lacked 140 C-library symbols, 123 since zlib is translated with the program (`phase2/missing.txt`:
+   stdio, locale, wide chars, float math, pthreads, OS, sockets). With zlib inside and liblzma off, the phase 1 gate
+   still passes (reference, native and translated builds identical). No symbol hashing needed: kencc takes names up to 1500 chars, OpenTTD's longest is 626.
    zlib is translated with the program now (9front's APE libz is 1.2.2 with a 32-bit uLong, a different z_stream ABI);
    liblzma follows later, configured down (no Plan 9 port; until then the gate's xz regression save is converted once
    by the stock build). zlib first because it is the lighter, cleaner library (plain C89, no config, threads or SIMD;

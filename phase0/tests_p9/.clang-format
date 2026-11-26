@@ -1,0 +1,21 @@
+# Layout of the phase 0 C++ tests: close to OpenTTD's own style, which they mirror.
+BasedOnStyle: LLVM
+UseTab: ForIndentation
+IndentWidth: 4
+TabWidth: 4
+ColumnLimit: 110
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterFunction: true
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: WithoutElse
+AllowShortLoopsOnASingleLine: true
+AllowShortBlocksOnASingleLine: Never
+AllowShortLambdasOnASingleLine: All
+AlwaysBreakTemplateDeclarations: Yes
+PointerAlignment: Right
+SpaceBeforeCpp11BracedList: true
+Cpp11BracedListStyle: false
+IndentCaseLabels: false
+SortIncludes: Never
+ReflowComments: false

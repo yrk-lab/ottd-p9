@@ -34,7 +34,7 @@ static int nested(int x)
 			r += 1;
 		} catch (double) {
 			r += 10;
-			throw 7;	// new exception from a handler
+			throw 7; // new exception from a handler
 		}
 		r += 100;
 	} catch (int v) {
@@ -48,7 +48,7 @@ int main()
 	for (int i = 0; i <= 5; i++) printf("classify(%d) = %d\n", i, classify(i));
 	for (int i = 0; i <= 2; i++) printf("nested(%d) = %d\n", i, nested(i));
 	int sum = 0;
-	for (int i = 0; i < 10000; i++) sum += classify(i % 3);	// many throw/catch cycles
+	for (int i = 0; i < 10000; i++) sum += classify(i % 3); // many throw/catch cycles
 	printf("sum = %d\n", sum);
 	return 0;
 }
