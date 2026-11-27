@@ -1,0 +1,15 @@
+#!/bin/bash
+# vmsh [command...]
+#	A shell in the 9front VM run9front.sh boots: rc, through the
+#	listener termrc.local starts (host port 17019, this machine only).
+#	With arguments, runs them as one rc command line and prints the
+#	output; without, rc reads standard input (a script, or typed:
+#	no prompt).
+#		./vmsh ps
+#		./vmsh 'cat /net/tcp/*/status'
+#		./vmsh 'echo lstk() | acid 123'
+if [ $# -gt 0 ]; then
+	printf '%s\n' "$*" | nc -N 127.0.0.1 17019
+else
+	nc -N 127.0.0.1 17019
+fi

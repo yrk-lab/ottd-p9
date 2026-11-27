@@ -9,6 +9,7 @@ enum
 	Maxfd		= 1024,		/* FD_SETSIZE */
 	Ndir		= 40,		/* NETPATHLEN */
 	Nrbuf		= 64*1024,	/* stream receive buffer */
+	Nobuf		= 16*1024,	/* stream send buffer (see c_send) */
 	Ncall		= 8,		/* pending connections */
 	Ndgram		= 64,		/* pending datagrams */
 	Mtu		= 2048,		/* largest datagram kept */
@@ -51,6 +52,11 @@ struct Sock
 	uchar	local[16];	/* from bind: a glibc sockaddr_in */
 	int	bound;
 
+	/* sent, not yet written (c_send) */
+	uchar	*obuf;
+	long	nobuf;
+	int	oerr;		/* a write failed */
+
 	/* filled by the helper */
 	uchar	*buf;		/* Sconnected: received bytes */
 	long	nbuf;
@@ -83,3 +89,4 @@ int	csquery(char*, uchar*);
 
 /* net_p9.c */
 void	adopt(Sock*, int);
+void	netflush(void);		/* also net_none.c; called by os_p9.c's nanosleep */

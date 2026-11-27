@@ -32,6 +32,12 @@ seterr(int e)
 	*__errno_location() = e;
 }
 
+/* nothing is ever sent (net_p9.c batches what is) */
+void
+netflush(void)
+{
+}
+
 /*
  * The socket calls are renamed c_<name> by lower.py, as is close,
  * since net_p9.c's must also release a socket.

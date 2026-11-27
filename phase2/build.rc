@@ -167,13 +167,15 @@ if(test -f $out/gui/openttd.cfg){
 # a dedicated server for the host's client
 if(test -f $out/ded/openttd.cfg){
 	d=$out/ded
+	if(~ $#netdebug 0)
+		netdebug=3
 	if(~ $#dedtime 0)
 		dedtime=600
 	cp $d/openttd.cfg /tmp/ded.cfg
 	personal $d
 	mv /tmp/ded.cfg $d/openttd.cfg
 	XDG_DATA_HOME=$d/data XDG_CONFIG_HOME=$d/config $o/openttd -D -x -c $d/openttd.cfg \
-		-d net^'='^3 >$d/log >[2=1] &
+		-d net^'='^$netdebug >$d/log >[2=1] &
 	pid=$apid
 	# rc has no break: count in the condition
 	i=0

@@ -134,6 +134,7 @@ release(Sock *s)
 	unlock(&s->lk);
 	if(r == 0){
 		free(s->buf);
+		free(s->obuf);
 		free(s->dgram);
 		free(s);
 	}
@@ -463,7 +464,8 @@ static int
 startreader(Sock *s)
 {
 	s->buf = malloc(Nrbuf);
-	if(s->buf == nil)
+	s->obuf = malloc(Nobuf);
+	if(s->buf == nil || s->obuf == nil)
 		return -1;
 	s->state = Sconnected;
 	return starthelper(s, streamreader);
@@ -484,6 +486,7 @@ c_accept(int fd, void *sa, void *lenp)
 		seterr(Einval);
 		return -1;
 	}
+	netflush();
 	lock(&s->lk);
 	if(s->ncall == 0){
 		unlock(&s->lk);
@@ -552,25 +555,64 @@ c_connect(int fd, void *sa, uint len)
 	return 0;
 }
 
+/*
+ * Sending is batched: each of the program's send calls would be a TCP
+ * write, and OpenTTD sends a packet per call, so a tick's packets
+ * (a frame and its sync, say) could arrive in separate segments and
+ * be acted on apart: a client that saw the frame before the sync
+ * missed every sync and never acknowledged one, and the server
+ * dropped it (issue #7).  What is sent waits in the socket's buffer
+ * until it is full or the program next selects, receives, accepts,
+ * closes or sleeps (nanosleep, os_p9.c): one write a batch, no delay.
+ */
+static void
+flush(Sock *s)
+{
+	if(s->nobuf == 0)
+		return;
+	if(!s->oerr && write(s->data, s->obuf, s->nobuf) != s->nobuf)
+		s->oerr = 1;
+	s->nobuf = 0;
+}
+
+void
+netflush(void)
+{
+	int fd;
+	Sock *s;
+
+	for(fd = 0; fd < Maxfd; fd++){
+		s = socks[fd];
+		if(s != nil && s->nobuf > 0)
+			flush(s);
+	}
+}
+
 vlong
 c_send(int fd, void *buf, uvlong n, int)
 {
 	Sock *s;
-	long r;
 
 	s = lookup(fd);
 	if(s == nil)
 		return -1;
-	if(s->state != Sconnected){
+	if(s->state != Sconnected || s->oerr){
 		seterr(Epipe);
 		return -1;
 	}
-	r = write(s->data, buf, n);
-	if(r < 0){
-		seterr(Epipe);
-		return -1;
+	if(s->nobuf + n > Nobuf)
+		flush(s);
+	if(n >= Nobuf){
+		if(write(s->data, buf, n) != n){
+			s->oerr = 1;
+			seterr(Epipe);
+			return -1;
+		}
+		return n;
 	}
-	return r;
+	memmove(s->obuf + s->nobuf, buf, n);
+	s->nobuf += n;
+	return n;
 }
 
 vlong
@@ -586,6 +628,7 @@ c_recv(int fd, void *buf, uvlong n, int)
 		seterr(Einval);
 		return -1;
 	}
+	netflush();
 	lock(&s->lk);
 	if(s->nbuf == 0){
 		m = s->eof ? 0 : -1;
@@ -755,6 +798,7 @@ c_getpeername(int fd, void *sa, void *lenp)
 static void
 sockclose(Sock *s)
 {
+	flush(s);
 	socks[s->fd] = nil;
 	lock(&s->lk);
 	s->dead = 1;
@@ -833,6 +877,7 @@ c_select(int n, uvlong *r, uvlong *w, uvlong *e, Ctimeval *tv)
 
 	if(n > Maxfd)
 		n = Maxfd;
+	netflush();
 	for(i = 0; i < Maxfd/64; i++){
 		rin[i] = r != nil ? r[i] : 0;
 		win[i] = w != nil ? w[i] : 0;

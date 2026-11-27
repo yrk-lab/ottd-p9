@@ -480,3 +480,13 @@ Next steps now (replace section 10's first two items):
   (game stalls in world gen; 2 MB over u9fs) - 9front uses the external tool; shim shots remain for p9p.
   9front shows the kernel console screen until the game's first paint (~title load failing, ~25 s).
   Dedicated-server join failed again in these runs (#7): now 4 of 7.
+- #7 FIXED (2026-11-27): client never sent its first ACK. OpenTTD client acks first only when its frame counter
+  lands EXACTLY on a SYNC frame; SYNC packets arrived after the FRAME of the same tick (separate TCP writes ->
+  separate segments) and the spinning null-driver client ran the tick in between -> "Missed frame for
+  sync-test: N / N+1" forever -> server drops at max_join_time. Fix: net_p9.c batches sends (Sock.obuf 16 KB),
+  flushed on full/select/recv/accept/close/nanosleep (os_p9 nanosleep -> netflush; net_none stub). Verified
+  3 runs. (9front TCP itself has no Nagle-ish hold except sent>3*mss; no nodelay ctl exists.)
+  netdebug=N param (run9front/build.rc). Level 9 shows join states and Receive_CLIENT_ACK; level 7 "Sent ACK".
+- VM ACCESS: termrc.local starts aux/listen1 -t tcp!*!17019 /bin/rc and tcp!*!17564 /bin/exportfs -s (exportfs
+  has no auth itself; p9p 9p attaches fine); hostfwd 127.0.0.1 only. phase2/vmsh (nc -N), phase2/vmfs (9p -a).
+  keep=1 skips the reboot. Gotcha: `pgrep -f qemu-system` matches the waiting shell's own command line.

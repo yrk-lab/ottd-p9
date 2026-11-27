@@ -33,6 +33,26 @@ LLVM made module-level names unique, and C++ file-local names are mangled.
     first; Plan 9 dial/announce later)
   - 1-byte atomics
 
+## Sends batched: the client that never acknowledged (2026-11-27, issue #7)
+
+The stock client sometimes joined the 9front server, played, and was dropped after 500 ticks "to join". With
+`netdebug=9` (both sides' `-d net=9`) the cause showed: after the map the client must land exactly on the
+frame of a SYNC packet to send its first ACK, and every SYNC came one frame late ("Missed frame for
+sync-test: 300 / 301"). The server writes a tick's FRAME and SYNC back to back, each with its own send(), and
+`c_send` made each a TCP write: they could arrive in separate segments, and a client that ran its tick
+between them (the test's null-driver client spins) never caught up. Now `c_send` fills a per-socket buffer
+(16 KB), written when it is full or when the program next selects, receives, accepts, closes or sleeps
+(`netflush` from `nanosleep`): a tick's packets leave in one write, with no added delay, since OpenTTD always
+does one of those right after sending. Three runs since: the client joins and stays, ACKs every 75 frames.
+
+## Looking inside the 9front VM
+
+`run9front.sh`'s boot starts two listeners, forwarded to this machine only: `./vmsh` is rc in the VM
+(`./vmsh ps`, `./vmsh 'cat /net/tcp/*/status'`, `./vmsh 'echo lstk() | acid 123'`), and `./vmfs` reads its
+namespace through exportfs with plan9port's 9p (`./vmfs ls /proc`, `./vmfs read /dev/kmesg`). The QEMU monitor
+is `work/qemu.mon` (`screendump`, input). With `keep=1` the VM stays up after build.rc; `./vmsh 'echo reboot
+>/dev/reboot'` ends it. `netdebug=N` sets both sides' network debug level.
+
 ## Phase 2.5: unit by unit (2026-11-27)
 
 The whole-program link made every change rewrite 2-3 GB (the linked module, ~150 MB, several times; three

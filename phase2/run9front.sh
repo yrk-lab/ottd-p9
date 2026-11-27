@@ -29,6 +29,12 @@
 #	  it as a client through QEMU's port forward (host port 13979)
 #	  for $clienttime seconds (default 60); the server must report the
 #	  client joined and was not dropped, and neither side a desync.
+#
+#	While it runs, ./vmsh is a shell in the VM and ./vmfs reads its
+#	namespace (/proc, /net, /dev/kmesg...) with plan9port's 9p; the
+#	QEMU monitor is work/qemu.mon (screendump file.ppm: the screen).
+#	With keep=1 the VM stays up after build.rc, for a look around:
+#	./vmsh 'echo reboot >/dev/reboot' ends it.
 set -uo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 out= work=
@@ -83,13 +89,18 @@ if(~ $p9test ottd){
 	# termrc sets it up after termrc.local
 	screenrc
 	srv -nc tcp!10.0.2.100!565 ottd /n/ottdfs
+	# a way in, for the host (vmsh, vmfs): rc, and the namespace by
+	# exportfs, on ports QEMU forwards from this machine only
+	aux/listen1 -t tcp!*!17019 /bin/rc &
+	aux/listen1 -t tcp!*!17564 /bin/exportfs -s &
 	bind /n/ottdfs/ottd /n/ottd
-	objtype=amd64 NPROC=2 ticks=TICKS guitime=GUITIME guishots=(GUISHOTS) rc /n/ottd/phase2/build.rc >/n/ottd/phase2/work/9f/results.txt >[2=1]
+	objtype=amd64 NPROC=2 ticks=TICKS guitime=GUITIME guishots=(GUISHOTS) netdebug=NETDEBUG rc /n/ottd/phase2/build.rc >/n/ottd/phase2/work/9f/results.txt >[2=1]
 	cat /n/ottd/phase2/work/9f/results.txt
-	echo reboot >/dev/reboot
+	if(! ~ KEEP 1)
+		echo reboot >/dev/reboot
 }
 RC
-sed -i "s/TICKS/${ticks:-100000}/; s/GUITIME/${guitime:-120}/; s/GUISHOTS/${guishots:-20}/" "$root/rc/bin/termrc.local"
+sed -i "s/TICKS/${ticks:-100000}/; s/GUITIME/${guitime:-120}/; s/GUISHOTS/${guishots:-20}/; s/NETDEBUG/${netdebug:-3}/; s/KEEP/${keep:-0}/" "$root/rc/bin/termrc.local"
 
 accel=
 wrap=
@@ -112,6 +123,7 @@ printf '#!/bin/sh\nmount --bind %s %s/ottd && exec %s/u9fs -a none -u %s %s\n' \
 chmod +x "$here/work/u9repo"
 u9repo="unshare -rm $here/work/u9repo"
 fwd="hostfwd=tcp:127.0.0.1:13979-:3979,hostfwd=udp:127.0.0.1:13979-:3979"
+fwd="$fwd,hostfwd=tcp:127.0.0.1:17019-:17019,hostfwd=tcp:127.0.0.1:17564-:17564"
 $wrap timeout ${timeout:-7200} qemu-system-x86_64 $accel -m 4G -smp 2 -nographic -no-reboot \
 	-kernel "$nine/9pc64" \
 	-append "nobootprompt=tcp fs=$fs auth=$fs console=0 b115200 user=glenda p9test=ottd vgasize=1024x768x32 monitor=vesa mouseport=ps2" \
@@ -191,7 +203,7 @@ if [ -f "$f9/ded/ready" ]; then
 		>"$c/openttd.cfg"
 	XDG_DATA_HOME=$c/data XDG_CONFIG_HOME=$c/config timeout ${clienttime:-60} \
 		"$p1/build-ref/openttd" -n 127.0.0.1:13979 -x -c "$c/openttd.cfg" \
-		-v null:ticks=1000000000 -s null -m null -d net=3 >"$c/log" 2>&1
+		-v null:ticks=1000000000 -s null -m null -d net=${netdebug:-3} >"$c/log" 2>&1
 	client=$c/log
 	touch "$f9/ded/done"
 fi

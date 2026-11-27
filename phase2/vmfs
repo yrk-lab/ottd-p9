@@ -1,0 +1,10 @@
+#!/bin/bash
+# vmfs 9p-command path...
+#	The 9front VM's namespace, as its exportfs serves it (host port
+#	17564, this machine only), through plan9port's 9p(1): read, ls,
+#	stat, write...
+#		./vmfs ls /proc
+#		./vmfs read /dev/kmesg
+#		./vmfs read /net/tcp/3/status
+export PLAN9=${PLAN9:-$HOME/plan9}
+exec "$PLAN9/bin/9p" -a 'tcp!127.0.0.1!17564' "$@"

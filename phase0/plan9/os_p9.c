@@ -16,6 +16,7 @@
 int	*__errno_location(void);	/* libc_p9.c */
 void	c_seterrno(void);
 char	*strerror_r(int, char*, uvlong);
+void	netflush(void);		/* net_p9.c, net_none.c */
 
 enum
 {
@@ -484,9 +485,11 @@ c_time(vlong *t)
 	return now;
 }
 
+/* sending a batch of packets ends here, if not at a select: write them (net_p9.c) */
 int
 nanosleep(Ctimespec *req, Ctimespec *rem)
 {
+	netflush();
 	sleep(req->sec*1000 + req->nsec/1000000);
 	if(rem != nil){
 		rem->sec = 0;
