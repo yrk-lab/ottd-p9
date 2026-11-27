@@ -572,3 +572,10 @@ Next steps now (replace section 10's first two items):
   games/opl3 <{games/dmid -i /mnt/wad/genmidi song}'. systembank()/le32/tmp copy gone. Checked in the VM: opl3 has
   the rc's pid, no rc waits, /mnt/wad only in opl3's ns, kill notepg -> opl3, dmid, pcmconv, wadfs all exit
   (wadfs: RFNOTEG of its own, but ends when the namespace's last mount goes). 9front-audio.wav: sound throughout.
+- CURSOR WHEN NOT CURRENT (#17, 2026-11-27): win9f.c: estart on /dev/wctl (OREAD, exclusive: open fails -> no
+  events), field 5 current|notcurrent -> P9Efocus (x 1/0, new enum after P9Eexit); winp9p.c stub. draw_p9.c:
+  esetcursor(nil) when not current, &blank when current. plan9-video.patch: P9E_FOCUS -> UndrawMouseCursor,
+  _cursor.in_window false/true. build.sh RUNTIME + win9f/winp9p. build.rc guifocus="t1 t2" (second window at
+  860,40 at t1, game current again at t2), focus9f-rio.input; screenshots 35/52/58/78 show it. First run: the game
+  never started in rio (no log at all, pid empty -> build.rc died at `$start + $t`); rerun fine; build.rc now says
+  "the game did not start in rio" and goes on (pid=none).

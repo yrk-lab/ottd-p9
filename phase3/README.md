@@ -6,8 +6,11 @@ hand-written C shim on libdraw through ints and pointers only (`../phase0/plan9/
 
 - `draw_p9.c`: the window, flushing the dirty rectangle (whole rows, `loadimage` into an XRGB32 image, `draw`
   onto the screen), the mouse, resizes, the hidden Plan 9 cursor (the game draws its own);
-- the keyboard, the system part: `kbd9f.c` on 9front reads `/dev/kbd` (keys down and up, so held keys and
+- the keyboard, a system part: `kbd9f.c` on 9front reads `/dev/kbd` (keys down and up, so held keys and
   modifiers work), `kbdp9p.c` with plan9port takes event(2)'s characters only;
+- the window's state, a system part: `win9f.c` follows rio's `/dev/wctl` (each read after the first waits for a
+  change) and tells the driver P9Efocus when the window becomes current or stops being so; `winp9p.c` tells
+  nothing (devdraw does not say);
 - `draw_none.c`: for builds with no draw device (goken), `p9draw_init` fails and the game picks another driver.
 
 How keys reach the game: the shim turns the keyboard into events (P9Event). On 9front `kbd9f.c` reads
@@ -76,7 +79,19 @@ P9Eresize), and `newgame9f-rio.input`: the same session as on the bare screen, t
 
 In rio the game sees the mouse only while its window is current: rio sends mouse events to the current window
 alone (rio.c's mouse thread), so a window under the pointer that is not current gets none, and the first click
-only makes it current (issue #14). Every rio program is so.
+only makes it current (issue #14). Every rio program is so. While the window is not current, the shim gives it
+rio's cursor back (`esetcursor(nil)`) and the driver takes the game's drawn one away (`UndrawMouseCursor`,
+`_cursor.in_window` false, as SDL's driver on leaving its window), so the pointer does not look stuck over a
+window that does not hear it (issue #17); when it is current again, the game's cursor comes back with the next
+mouse event. Only one reader may open a wctl: without one (the bare screen, or someone else reading it) the
+window is taken to be current. Checked:
+
+	ticks=100 gui=1 guirio=1 guitime=85 guifocus="40 60" guishots="35 52 58 70 78" \
+		guiinput=../phase3/focus9f-rio.input ../phase2/run9front.sh
+
+`guifocus="t1 t2"`: rio's init script opens a second window at t1 (it becomes current) and makes the game's
+current again at t2 through its wctl; the screenshots show the game's cursor, then rio's over the game and none
+of the game's, then the game's again. (`screens/9front-rio-focus.png`)
 
 The positions in the input scripts are measured from screenshots: the menu's windows are not all centred
 alike, and a click a few pixels off lands on another window (on the title screen, Exit quits at once).

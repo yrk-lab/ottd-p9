@@ -168,7 +168,9 @@ if(test -f $out/gui/openttd.cfg){
 		# in a rio window, as one runs it: rio's -i script opens the
 		# window; with $guiresize, a process finds it in wsys by its
 		# label (the game's caption) and, $guiresize seconds after,
-		# makes it bigger through its wctl
+		# makes it bigger through its wctl; with $guifocus (t1 t2), a
+		# second window is opened at t1, which makes it current, and
+		# the game's is made current again at t2
 		{
 			echo '#!/bin/rc'
 			# quoted: a word with = in it is an assignment or an error to rc
@@ -186,6 +188,16 @@ if(test -f $out/gui/openttd.cfg){
 				echo '			echo resize -r 40 40 1000 740 >$w/wctl'
 				echo '} &'
 			}
+			if(~ $#guifocus 2){
+				echo '{'
+				echo '	sleep' $guifocus(1)
+				echo '	window -r 860 40 1010 300 rc'
+				echo '	sleep' `{echo $guifocus(2) - $guifocus(1) | hoc}
+				echo '	for(w in /dev/wsys/* /mnt/wsys/wsys/*)'
+				echo '		if(grep -s ''^OpenTTD'' $w/label >[2]/dev/null)'
+				echo '			echo current >$w/wctl'
+				echo '} &'
+			}
 		} >/tmp/rioinit
 		chmod +x /tmp/game /tmp/rioinit
 		rio -i /tmp/rioinit </dev/null >/dev/null >[2=1] &
@@ -196,6 +208,11 @@ if(test -f $out/gui/openttd.cfg){
 			sleep 1
 			pid=`{ps | grep ' 6\.openttd$' | awk '{print $2}' | sed 1q}
 			i=`{echo $i + 1 | hoc}
+		}
+		# no game: say so, and go on to the rest (/proc/none is not)
+		if(~ $#pid 0){
+			echo video driver: the game did not start in rio
+			pid=none
 		}
 	}
 	if not{

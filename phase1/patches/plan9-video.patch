@@ -1,6 +1,6 @@
 --- src-ref/src/video/plan9_v.cpp	1970-01-01 01:00:00.000000000 +0100
 +++ src-p9/src/video/plan9_v.cpp	1970-01-01 01:00:00.000000000 +0100
-@@ -0,0 +1,375 @@
+@@ -0,0 +1,386 @@
 +/*
 + * This file is part of OpenTTD.
 + * OpenTTD is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 2.
@@ -37,7 +37,7 @@
 +	/** An event from the shim. */
 +	struct P9Event {
 +		int type; ///< One of P9E_*.
-+		int x;    ///< Mouse: position in the window.
++		int x;    ///< Mouse: position in the window. Focus: 1 current, 0 not.
 +		int y;
 +		int buttons; ///< Mouse: 1 left, 2 middle, 4 right, 8 and 16 the wheel.
 +		int rune;    ///< Key: the Plan 9 rune.
@@ -59,6 +59,7 @@
 +	P9E_KEYUP,   ///< A key went up.
 +	P9E_RESIZE, ///< The window changed size: x, y.
 +	P9E_EXIT,   ///< The window was deleted.
++	P9E_FOCUS,  ///< The window became current (x 1) or not (x 0): rio sends the mouse to the current window only.
 +};
 +
 +/** Plan 9 runes for special keys, from keyboard.h. */
@@ -328,6 +329,16 @@
 +
 +		case P9E_EXIT:
 +			HandleExitGameRequest();
++			break;
++
++		case P9E_FOCUS:
++			/* Not current: the mouse is no longer ours, and the shim shows Plan 9's cursor: take ours away. */
++			if (e.x == 0) {
++				UndrawMouseCursor();
++				_cursor.in_window = false;
++			} else {
++				_cursor.in_window = true;
++			}
 +			break;
 +	}
 +	return true;

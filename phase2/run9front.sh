@@ -26,7 +26,9 @@
 #	  "click" presses and releases the left button, anything else
 #	  goes to the monitor (sendkey right 2000; sendkey grave_accent).
 #	  With guirio=1 the game runs in a rio window (800x600 at 40,40)
-#	  and with guiresize=n is made 960x700 after n seconds.  With
+#	  and with guiresize=n is made 960x700 after n seconds; with
+#	  guifocus="t1 t2" a second window (at 860,40) is opened t1
+#	  seconds after rio starts, and the game's made current at t2.  With
 #	  guiaudio=1 the game has the Plan 9 sound and music drivers and
 #	  QEMU an Intel HDA card, whose output is work/9front-audio.wav;
 #	- a dedicated server: once it is up, the stock Linux build joins
@@ -100,13 +102,13 @@ if(~ $p9test ottd){
 	aux/listen1 -t tcp!*!17019 /bin/rc &
 	aux/listen1 -t tcp!*!17564 /bin/exportfs -s &
 	bind /n/ottdfs/ottd /n/ottd
-	objtype=amd64 NPROC=2 ticks=TICKS guitime=GUITIME guishots=(GUISHOTS) guirio=GUIRIO guiresize=(GUIRESIZE) guiaudio=GUIAUDIO netdebug=NETDEBUG rc /n/ottd/phase2/build.rc >/n/ottd/phase2/work/9f/results.txt >[2=1]
+	objtype=amd64 NPROC=2 ticks=TICKS guitime=GUITIME guishots=(GUISHOTS) guirio=GUIRIO guiresize=(GUIRESIZE) guifocus=(GUIFOCUS) guiaudio=GUIAUDIO netdebug=NETDEBUG rc /n/ottd/phase2/build.rc >/n/ottd/phase2/work/9f/results.txt >[2=1]
 	cat /n/ottd/phase2/work/9f/results.txt
 	if(! ~ KEEP 1)
 		echo reboot >/dev/reboot
 }
 RC
-sed -i "s/TICKS/${ticks:-100000}/; s/GUITIME/${guitime:-120}/; s/GUISHOTS/${guishots:-20}/; s/NETDEBUG/${netdebug:-3}/; s/GUIRIO/${guirio:-0}/; s/GUIAUDIO/${guiaudio:-0}/; s/GUIRESIZE/${guiresize:-}/; s/KEEP/${keep:-0}/" "$root/rc/bin/termrc.local"
+sed -i "s/TICKS/${ticks:-100000}/; s/GUITIME/${guitime:-120}/; s/GUISHOTS/${guishots:-20}/; s/NETDEBUG/${netdebug:-3}/; s/GUIRIO/${guirio:-0}/; s/GUIAUDIO/${guiaudio:-0}/; s/GUIRESIZE/${guiresize:-}/; s/GUIFOCUS/${guifocus:-}/; s/KEEP/${keep:-0}/" "$root/rc/bin/termrc.local"
 
 accel=
 wrap=

@@ -3,8 +3,11 @@
  * flushing the game's 32 bpp screen into it, the mouse, resizes, and
  * the cursor (Plan 9's is hidden: the game draws its own).  The game's
  * pixels are little-endian B G R x words, which is XRGB32.  The
- * keyboard is the system part: kbd9f.c on 9front, kbdp9p.c on
- * plan9port.  See p9draw.h.
+ * keyboard is a system part: kbd9f.c on 9front, kbdp9p.c on
+ * plan9port; so is the window's state (win9f.c, winp9p.c): while the
+ * window is not current (rio sends it no mouse), Plan 9's cursor is
+ * shown over it, and the game is told so that it takes its own away.
+ * See p9draw.h.
  *
  * For tests: with $p9drawshot set to a path prefix, the shim writes
  * prefix.ready when the window is up, and the window as shown, read
@@ -82,6 +85,7 @@ p9draw_init(char *label, int *w, int *h)
 		return -1;
 	einit(Emouse | kbdevents());
 	kbdinit();
+	wininit();
 	esetcursor(&blank);
 	if(newimage() < 0)
 		return -1;
@@ -195,6 +199,10 @@ p9draw_event(P9Event *e)
 		e->type = P9Eresize;
 		e->x = Dx(screen->r);
 		e->y = Dy(screen->r);
+		return 1;
+	}
+	if(winevent(e)){
+		esetcursor(e->x ? &blank : nil);
 		return 1;
 	}
 	return kbdevent(e);

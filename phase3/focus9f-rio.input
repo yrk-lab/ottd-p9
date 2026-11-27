@@ -1,0 +1,8 @@
+# 9front in rio, with guifocus="40 60" (seconds after rio starts): the
+# mouse over the game's window on the title screen, then over it again
+# while the second window is current (rio's cursor should show there,
+# the game's gone), and once more when the game is current again
+30 at 400 300
+50 at 300 250
+54 at 420 330
+72 at 360 280
