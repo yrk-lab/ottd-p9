@@ -919,13 +919,9 @@ enum
 	Erange	= 34,	/* Linux ERANGE */
 };
 
-static int	cerrno;
-
-int*
-__errno_location(void)
-{
-	return &cerrno;
-}
+/* errno is each thread's: thread9f.c, thread_none.c */
+int	*__errno_location(void);
+#define	cerrno	(*__errno_location())
 
 /*
  * strtol and friends.  Plan 9's strtol returns a 32-bit long, and none of
@@ -2653,10 +2649,22 @@ c_exit(int status)
 
 int	c_main(int, char**);
 void	__p9_ctors(void);	/* static constructors, emitted by lower.py */
+void	p9runmain(void (*)(void*), void*);	/* thread9f.c: on a stack the threads share; thread_none.c */
+
+static int	margc;
+static char	**margv;
+
+static void
+runmain(void*)
+{
+	__p9_ctors();
+	c_exit(c_main(margc, margv));
+}
 
 void
 main(int argc, char **argv)
 {
-	__p9_ctors();
-	c_exit(c_main(argc, argv));
+	margc = argc;
+	margv = argv;
+	p9runmain(runmain, nil);
 }

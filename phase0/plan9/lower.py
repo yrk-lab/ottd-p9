@@ -13,7 +13,8 @@ LIBC = "--libc" in sys.argv[1:]	# translated ISO C program: route libc reference
 # the file ctors, for ../tu/mkctors.py's table
 UNIT = [a[7:].split(",", 1) for a in sys.argv[1:] if a.startswith("--unit=")]
 # ISO C names whose Plan 9 counterparts are missing or have a different ABI
-# (long = 32 bit on Plan 9 amd64)
+# (long = 32 bit on Plan 9 amd64); the pthread calls, the program's own
+# threads (thread_p9.c), apart from plan9port's use of glibc's
 RENAMED = """printf fprintf vprintf vfprintf snprintf vsnprintf putc fputc putchar fputs puts fwrite fflush fopen fclose
 getc fgetc getchar fgets perror strtol strtoul atol labs strlen exit stdin stdout stderr main
 stat lstat fstat opendir readdir closedir mkdir remove rename getcwd realpath
@@ -21,7 +22,12 @@ open read write lseek dup close time strerror isatty
 fread fseek fseeko ftell ftello feof ferror clearerr fileno flockfile funlockfile fflush_unlocked ungetc
 getwc ungetwc fputwc vasprintf tan
 socket bind listen accept connect send sendto recv recvfrom setsockopt getsockopt getsockname getpeername
-getaddrinfo freeaddrinfo getnameinfo gai_strerror getifaddrs freeifaddrs select ioctl""".split()
+getaddrinfo freeaddrinfo getnameinfo gai_strerror getifaddrs freeifaddrs select ioctl
+pthread_create pthread_join pthread_detach pthread_self pthread_setname_np pthread_key_create
+pthread_setspecific pthread_getspecific pthread_mutex_init pthread_mutex_destroy pthread_mutex_lock
+pthread_mutex_trylock pthread_mutex_unlock pthread_mutexattr_init pthread_mutexattr_destroy
+pthread_mutexattr_settype pthread_cond_destroy pthread_cond_signal pthread_cond_broadcast
+pthread_cond_wait pthread_cond_timedwait pthread_cond_clockwait""".split()
 # Names Plan 9 libraries define that a program may define too: renamed
 # p_<name> (libdraw's globals)
 PROGRAM = "display font screen _screen".split()
@@ -115,6 +121,13 @@ if LIBC:
 	s = "".join(p if i % 2 else ident.sub(r"p_\1", p) for i, p in enumerate(parts))
 	# glibc's setjmp is _setjmp: it must be Plan 9's setjmp itself, not a wrapper
 	s = re.sub(r"\b_setjmp\b", "setjmp", s)
+# 7. --unit: each thread has its own exception state (../eh/eh_rt.h,
+#    EH_TLS): __THREW__ is the first field of the thread's, which
+#    eh_self gives
+threw = ""
+if UNIT:
+	s = re.sub(r"^extern \w+ __THREW__;\n", "", s, flags=re.M)
+	threw = "extern uint64_t *eh_self(void);\n#define __THREW__ (*eh_self())\n"
 sys.stdout.write(
 	"#include <stdint.h>\n"
 	"#include <limits.h>\n"
@@ -125,4 +138,4 @@ sys.stdout.write(
 	"#define __UNALIGNED_LOAD__(type, align, op) (*(type*)(op))\n"
 	"void abort(void);\n"
 	"#define __builtin_unreachable() for(;;) abort()\n"
-	"#define __builtin_trap() abort()\n" + s)
+	"#define __builtin_trap() abort()\n" + threw + s)

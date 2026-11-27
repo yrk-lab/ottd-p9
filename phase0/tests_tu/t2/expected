@@ -1,0 +1,2 @@
+atomic 80000, locked 80000, recursive 16, caught 400, static built 1 time(s)
+handoff stage 2, wait timed out 1

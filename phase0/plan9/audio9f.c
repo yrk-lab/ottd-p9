@@ -2,7 +2,7 @@
  * The 9front part of the sound and music drivers' shim (p9audio.h).
  *
  * Sound: the game mixes in its own process, a little ahead, into a
- * ring; a helper process (rfork RFMEM, as net9f.c's) writes the ring
+ * ring; a helper process (sharing memory: thread9f.c's p9proc) writes the ring
  * to /dev/audio, whose writes block at the device's pace, so the game
  * never waits on the device.  The game's mixer must stay in the game's
  * process: the runtime's mutexes are no-ops.
@@ -41,6 +41,7 @@ struct Ring
 	int	eof;		/* music: the pipeline ended */
 	int	dead;		/* stop, helper */
 	int	done;		/* the helper has stopped */
+	void	(*run)(Ring*);	/* the helper */
 };
 
 static char	wad[] = "/sys/games/lib/doom/doom1.wad";
@@ -101,20 +102,25 @@ finish(Ring *g)
 	unlock(g);
 }
 
-/* start fn in a process sharing memory */
+int	p9proc(void (*)(void*), void*);	/* thread9f.c */
+
+static void
+ringrun(void *a)
+{
+	Ring *g;
+
+	g = a;
+	g->run(g);
+}
+
+/* start fn in a process sharing memory (thread9f.c's p9proc: on a stack in it) */
 static int
 helper(void (*fn)(Ring*), Ring *g)
 {
-	int pid;
-
 	g->dead = 0;
 	g->done = 0;
-	pid = rfork(RFPROC|RFMEM|RFNOWAIT);
-	if(pid == 0){
-		fn(g);
-		_exits(nil);
-	}
-	return pid;
+	g->run = fn;
+	return p9proc(ringrun, g);
 }
 
 /* stop a ring's helper, waiting a moment for it */

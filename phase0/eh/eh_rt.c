@@ -28,12 +28,19 @@ enum
 	Ntypes	= 1024,
 };
 
+#ifdef EH_TLS
+#define	thrown		(*(Exc**)&eh_self()->xthrown)
+#define	caught		(*(Exc**)&eh_self()->xcaught)
+#define	tempret0	(eh_self()->xtempret0)
+#else
 Ehframe		*eh_top;
 long long	__THREW__;
-
 static Exc	*thrown;
 static Exc	*caught;
 static int	tempret0;
+#endif
+
+/* shared by the threads: eh_lock (eh_sys.h) */
 static void	*typeids[Ntypes];
 static int	ntypeids;
 
@@ -146,13 +153,18 @@ llvm_eh_typeid_for(void *type)
 {
 	int i;
 
+	eh_lock();
 	for(i = 0; i < ntypeids; i++)
-		if(typeids[i] == type)
+		if(typeids[i] == type){
+			eh_unlock();
 			return i+1;
+		}
 	if(ntypeids == Ntypes)
 		terminate("too many exception types");
 	typeids[ntypeids++] = type;
-	return ntypeids;
+	i = ntypeids;
+	eh_unlock();
+	return i;
 }
 
 int

@@ -1,6 +1,6 @@
 /*
  * The 9front part of net_p9.c: helpers are processes sharing memory
- * (rfork RFMEM), UDP is /net's header mode, names go to /net/cs.
+ * (thread9f.c's p9proc), UDP is /net's header mode, names go to /net/cs.
  */
 #include <u.h>
 #include <libc.h>
@@ -19,6 +19,18 @@ stopall(void)
 			postnote(PNPROC, pids[i], "kill");
 }
 
+int	p9proc(void (*)(void*), void*);	/* thread9f.c */
+
+static void
+sockrun(void *a)
+{
+	Sock *s;
+
+	s = a;
+	s->run(s);
+}
+
+/* a process sharing memory (thread9f.c's p9proc: on a stack in it) */
 int
 starthelper(Sock *s, void (*run)(Sock*))
 {
@@ -31,14 +43,10 @@ starthelper(Sock *s, void (*run)(Sock*))
 	}
 	s->run = run;
 	s->refs++;
-	pid = rfork(RFPROC|RFMEM|RFNOWAIT);
+	pid = p9proc(sockrun, s);
 	if(pid < 0){
 		s->refs--;
 		return -1;
-	}
-	if(pid == 0){
-		run(s);
-		_exits(nil);
 	}
 	s->helperid = pid;
 	s->helper = 1;

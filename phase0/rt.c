@@ -101,20 +101,24 @@ __atomic_compare_exchange_8(volatile void *p, void *expected, uint64_t desired, 
 	return 0;
 }
 
-/* Guards for function-local statics (single threaded): byte 0 of the guard is set once initialized. */
-int
+/*
+ * Guards for function-local statics (single threaded): byte 0 of the
+ * guard is set once initialized.  Weak: a build with threads links
+ * plan9/thread_p9.c's.
+ */
+__attribute__((weak)) int
 __cxa_guard_acquire(uint64_t *g)
 {
 	return *(volatile char *)g == 0;
 }
 
-void
+__attribute__((weak)) void
 __cxa_guard_release(uint64_t *g)
 {
 	*(volatile char *)g = 1;
 }
 
-void
+__attribute__((weak)) void
 __cxa_guard_abort(uint64_t *g)
 {
 	(void)g;

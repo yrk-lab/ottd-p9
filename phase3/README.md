@@ -10,6 +10,17 @@ hand-written C shim on libdraw through ints and pointers only (`../phase0/plan9/
   modifiers work), `kbdp9p.c` with plan9port takes event(2)'s characters only;
 - `draw_none.c`: for builds with no draw device (goken), `p9draw_init` fails and the game picks another driver.
 
+How keys reach the game: the shim turns the keyboard into events (P9Event). On 9front `kbd9f.c` reads
+/dev/kbd: a `c` message (a character typed, repeated while held) is P9Echar; `k` and `K` (the set of keys held,
+after one went down or up) become P9Ekeydown and P9Ekeyup. With plan9port, `kbdp9p.c` has event(2)'s characters
+only. In the driver only P9Echar makes a key press: `TypeRune` maps the rune (`KeyCode`: Esc, the function and
+arrow keys, Enter...) to OpenTTD's key code, adds the modifiers held, and calls `HandleKeypress`; key down and up
+only keep the modifiers and the held arrows (`KeyState`), which scroll the map. Esc, for example, is rune 0x1B,
+`WKC_ESC`: in the game it cancels the tool in hand (the main toolbar's "reset_object_to_place" hotkey), in a query
+or a text box it cancels, and it closes the load/save dialog and the high scores; it does not close other windows
+(Delete does). In the load/save dialog it takes a second press, as in the stock game (checked against a Windows
+build of 15.3).
+
 A struct crossing between translated and native code must have a size that is a multiple of 8: 6c rounds every
 struct up to 8 bytes on amd64, clang does not. `P9Event` (five ints) was 24 bytes in the shim and 20 in the game,
 and clearing it zeroed half of the caller's return address. It has an explicit pad now.
@@ -52,6 +63,10 @@ P9Eresize), and `newgame9f-rio.input`: the same session as on the bare screen, t
 
 	ticks=100 gui=1 guirio=1 guitime=85 guishots="44 50 58 64 70 80" \
 		guiinput=../phase3/newgame9f-rio.input ../phase2/run9front.sh
+
+In rio the game sees the mouse only while its window is current: rio sends mouse events to the current window
+alone (rio.c's mouse thread), so a window under the pointer that is not current gets none, and the first click
+only makes it current (issue #14). Every rio program is so.
 
 The positions in the input scripts are measured from screenshots: the menu's windows are not all centred
 alike, and a click a few pixels off lands on another window (on the title screen, Exit quits at once).
@@ -102,8 +117,36 @@ dmid's instrument bank: 9front comes with one, the GENMIDI lump of its shareware
 (`/sys/games/lib/doom/doom1.wad`), which the shim copies out once; a file `genmidi` in a base set directory
 takes its place, found the way the game finds its other data. Nothing to set.
 
-`bundle.sh` makes `work/openttd-plan9.tgz`: `openttd/` with `6.openttd`, the data it finds next to it, the
+`bundle.sh` makes `work/openttd-<version>-plan9-amd64.tgz`: `openttd/` with `6.openttd`, the data it finds next to it, the
 licences and README (`bundle.README`: run in place, or install as `$home/bin/$cputype/openttd` with the data in
 `$home/lib/openttd`). Both were checked on 9front from the unpacked bundle with a fresh home (`bundletest.rc`,
 run in the VM through vmsh): the title game, music with 9front's bank. A test must stop the game by its note group
 (`/proc/n/notepg`): libdraw's event processes hold /dev/mouse, and a second game could not open it.
+
+## Threads (issue #11)
+
+OpenTTD runs link graph jobs, world generation and network connects in threads. They are the program's own
+pthread calls (libc++'s std::thread, mutex, condition_variable), renamed `c_pthread_*` by lower.py and served by
+`../phase0/plan9/thread_p9.c` over a small system part (`thread.h`): `thread9f.c` on 9front, `threadp9p.c` on
+Linux with plan9port (glibc's threads: the fast loop), `thread_none.c` on goken (none: thread creation fails and
+the work runs inline, as before).
+
+- On 9front a thread is a process sharing memory (rfork RFPROC|RFMEM). Plan 9 gives each such process a private
+  stack at the same addresses, but C++ hands stack objects to other threads (a lambda's captures, a condition
+  variable a thread waits on: the first t2 run hung on exactly that, each thread waiting on its own copy). So, as
+  libthread does, the program runs on stacks in shared memory: main on one (`p9runmain`, from libc_p9's main),
+  each new process on its own (`p9proc`, used by the net and audio helpers too). A process is forked from its
+  forker's private stack (an rfork on a shared stack would leave two processes on it): p9proc jumps to a point
+  p9runmain keeps there. The private stack keeps what is per process: a `privalloc` slot, which has the same
+  address in every thread and each thread's contents, holds the thread's state.
+- Per thread: errno, the pthread keys, and the exception state (`../phase0/eh/eh_rt.h`, `EH_TLS`: `__THREW__`,
+  the innermost handler, the exceptions in flight and caught; lower.py rewrites the units' `__THREW__`).
+- Mutexes: a count and a semaphore, the owner and depth (recursive ones). Condition variables: a queue of the
+  threads waiting, each on a semaphore of its own (with one semaphore for all, a waiter that came later took the
+  first one's wakeup: t2 deadlocked so on 9front). Semaphores are the kernel's (semacquire, tsemacquire), futexes
+  on Linux. Atomics: atomic(2) on 9front (bytes by compare-and-swap of the word), gcc's on Linux. Function-local
+  statics: a guard with an in-progress flag.
+- Tests: `../phase0/tests_tu/t2` (atomics, mutexes, a condition variable with a timed wait, exceptions in every
+  thread at once, a contended static), run by `../phase0/tu/test.sh` (goken, Linux) and on 9front through vmsh:
+  the native build's output, 30 of 30 runs on Linux, 10 of 10 on 9front. OpenTTD: the gate is the same on
+  goken, Linux (18 threads in 5000 ticks) and 9front; the GUI and the dedicated server run.

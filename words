@@ -534,3 +534,19 @@ Next steps now (replace section 10's first two items):
   (user tip; hidden from other namespaces, so logs go to /n/ottd); run detached (`... &` via vmsh) and poll a file;
   KILL THE NOTE GROUP (notepg): libdraw event slaves keep /dev/mouse open otherwise ("einit: can't open mouse:
   in use"). Plan 9 tr has no \n escape. OpenTTD writes openttd.cfg only on clean exit.
+- THREADS (2026-11-27, #11): thread_p9.c (shared: c_pthread_* via lower.py RENAMED; mutex = benaphore (count+sem),
+  cond = queue of waiting Threads each with own sem (first design, one sem for all: later waiter stole a wakeup ->
+  t2 deadlock on 9front), guards spin+in-progress, keys, Thread holds errno+Ehtls) over thread.h primitives:
+  thread9f.c (rfork RFMEM, privalloc slot, semacquire/tsemacquire, atomic(2) incl __atomic_* for kencc, errno,
+  kill threads at exit), threadp9p.c (glibc pthreads, __thread, futex sem, gcc atomics; Linux system runtime now
+  thread_p9+threadp9p instead of nothreads; unrename.h excludes pthread_), thread_none.c (goken).
+  KEY LESSON: RFMEM shares everything but the stack, and C++ shares stack objects with threads -> run main and
+  every RFMEM process on heap stacks (libthread's _threadinitstack jmp_buf trick: onstack()); fork only from the
+  private stack: p9runmain keeps a fork point (setjmp) in its frame on the private stack, p9proc longjmps there,
+  rforks, child runs on a new heap stack and longjmps back to its private stack to free it and _exits. net9f and
+  audio9f helpers use p9proc. Non-RFMEM forks (music pipeline) are fine (full copy).
+  EH per thread: eh_rt.h EH_TLS -> eh_self() (a call: Linux threads have no same-address slots); lower.py --unit
+  drops `extern uint64_t __THREW__;` and #defines __THREW__ (*eh_self()). kencc cpp expands a macro inside its own
+  body: Ehtls fields named x*. mkgen: runtime headers (RTHDR) as prerequisites via a recipe-less rule
+  (in metarules they made mk ambiguous). rt.c guards weak. libunits.py: single-file llvm-nm has no header.
+  Tests: phase0/tu/test.sh (goken+linux), tests_tu/t1 expected added, t2 threads. 9front run via vmsh script.

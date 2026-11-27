@@ -16,7 +16,31 @@ struct Ehframe
 	Ehframe	*prev;
 };
 
+/*
+ * With EH_TLS (the separately translated units, ../tu: lower.py
+ * rewrites their __THREW__ to match), each thread has its own
+ * exception state, which eh_self gives: the thread runtime's
+ * (../plan9/thread_p9.c, thread_none.c).  Without EH_TLS the state
+ * is plain globals.
+ */
+typedef struct Ehtls Ehtls;
+struct Ehtls
+{
+	long long	threw;		/* __THREW__: first, lower.py's units take it so */
+	Ehframe	*top;		/* the innermost __invoke_ wrapper */
+	/* eh_rt.c's; names of their own: kencc's cpp would expand a macro in its own body */
+	void	*xthrown;	/* in flight */
+	void	*xcaught;	/* caught, innermost first */
+	int	xtempret0;
+};
+
+#ifdef EH_TLS
+Ehtls	*eh_self(void);
+#define	__THREW__	(eh_self()->threw)
+#define	eh_top		(eh_self()->top)
+#else
 extern Ehframe	*eh_top;
 extern long long	__THREW__;
+#endif
 
 void	*eh_match(void **types, int n);

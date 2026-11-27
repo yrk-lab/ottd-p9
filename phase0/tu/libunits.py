@@ -11,7 +11,7 @@ import sys
 
 def symbols(files):
 	out = subprocess.run(["llvm-nm-17"] + files, capture_output=True, text=True, check=True).stdout
-	defined, undefined, cur = {}, {}, None
+	defined, undefined, cur = {None: set()}, {None: set()}, None	# one file: no name line
 	for line in out.splitlines():
 		if line.endswith(":") and " " not in line:
 			cur = line[:-1]

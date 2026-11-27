@@ -1,0 +1,5 @@
+registry 6 entries, 2 from constructors, first first
+same twice: 1, twice(21) = 42
+counts 221
+made a square, typeid matches: 1
+caught Oops 42
