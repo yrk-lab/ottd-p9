@@ -130,7 +130,7 @@ if(test -f $out/gui/openttd.cfg){
 	# the shim says when its window is up (in /tmp: it takes no shots,
 	# they are the screen's (screenshot | topng), taken on time whatever the game
 	# does); the ready file where the host sees it
-	rm -f /tmp/shot.*
+	rm -f /tmp/shot.* /tmp/screen.*
 	XDG_DATA_HOME=$d/data XDG_CONFIG_HOME=$d/config p9drawshot=/tmp/shot p9drawshotat=100000 \
 		$o/openttd -x -c $d/openttd.cfg -v plan9 -s null -m null -d driver^'='^3 >$d/log >[2=1] &
 	pid=$apid
