@@ -127,7 +127,7 @@ do_cbe()
 do_cc()
 {
 	gcc -w ${ccopt:--O0} -std=gnu11 -fno-builtin -I"$p0/eh" -I"$p0/eh/unix" \
-		"$tr/openttd.c" "$tr/invoke.c" "$p0/eh/eh_rt.c" "$p0/rt.c" "$top/nothreads.c" "$p0/plan9/draw_none.c" \
+		"$tr/openttd.c" "$tr/invoke.c" "$p0/eh/eh_rt.c" "$p0/rt.c" "$top/nothreads.c" "$p0/plan9/draw_none.c" "$p0/plan9/audio_none.c" \
 		-lm -o "$tr/openttd" 2>&1 | grep -v 'warning:' | head -40
 	[ -x "$tr/openttd" ] || return 1
 	# the data OpenTTD finds next to its executable (languages, scripts,

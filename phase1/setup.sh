@@ -1,7 +1,8 @@
 #!/bin/bash
 # setup
-#	Fetch the OpenTTD release, zlib and xz (translated with it) and
-#	the OpenGFX base graphics, and make the stock source tree src-ref.  Both src-ref and the patched
+#	Fetch the OpenTTD release, zlib and xz (translated with it), the
+#	OpenGFX, OpenSFX and OpenMSX base sets, and make the stock source
+#	tree src-ref.  Both src-ref and the patched
 #	src-p9 are exported without .git and share one .ottdrev, so the
 #	two builds carry the same version string and their saves can be
 #	compared byte for byte.
@@ -32,6 +33,38 @@ fi
 
 if [ ! -d "$xz" ]; then
 	git -c advice.detachedHead=false clone -q --depth 1 --branch "$xztag" https://github.com/tukaani-project/xz.git "$xz"
+fi
+
+# the free sound and music sets, as OpenGFX: name-version-all.zip
+# holding name-version.tar
+for set in opensfx:$opensfx openmsx:$openmsx; do
+	n=${set%%:*} v=${set#*:}
+	[ -d "$data/openttd/baseset/$n" ] && continue
+	mkdir -p "$data/openttd/baseset"
+	curl -fsSL -o "$work/$n.zip" "https://cdn.openttd.org/$n-releases/$v/$n-$v-all.zip"
+	unzip -q -o "$work/$n.zip" -d "$work/$n"
+	tar -x -C "$data/openttd/baseset" -f "$work/$n/$n-$v.tar"
+	mv "$data/openttd/baseset/$n-$v" "$data/openttd/baseset/$n"
+done
+
+# the instrument bank for 9front's MIDI player (games/dmid): Freedoom's
+# GENMIDI lump (BSD licence), from its WAD
+if [ ! -f "$data/genmidi" ]; then
+	curl -fsSL -o "$work/freedoom.zip" \
+		"https://github.com/freedoom/freedoom/releases/download/v$freedoom/freedoom-$freedoom.zip"
+	unzip -q -o -j "$work/freedoom.zip" "freedoom-$freedoom/freedoom2.wad" -d "$work/freedoom"
+	python3 - "$work/freedoom/freedoom2.wad" "$data/genmidi" <<'PY'
+import struct, sys
+w = open(sys.argv[1], "rb").read()
+n, off = struct.unpack("<ii", w[4:12])
+for i in range(n):
+	o, s, name = struct.unpack("<ii8s", w[off + 16*i:off + 16*i + 16])
+	if name.rstrip(b"\0") == b"GENMIDI":
+		open(sys.argv[2], "wb").write(w[o:o + s])
+		break
+else:
+	sys.exit("no GENMIDI in " + sys.argv[1])
+PY
 fi
 
 if [ ! -d "$data/openttd/baseset/opengfx" ]; then

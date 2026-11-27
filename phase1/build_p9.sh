@@ -3,7 +3,8 @@
 #	Build OpenTTD the way the translator will see it: clang 17 (the
 #	LLVM llvm-cbe is pinned to) with libc++, exceptions and RTTI on,
 #	the game with its GUI and the Plan 9 video driver (patches/
-#	plan9-video.patch; its draw shim is ../phase0/plan9/draw_none.c
+#	plan9-video.patch; its draw shim is ../phase0/plan9/draw_none.c, the
+#	sound and music drivers' (plan9-audio.patch) audio_none.c
 #	here, so it does not start on Linux), libraries as build_ref.sh,
 #	from src-p9 (src-ref with patches/series applied; prep.sh), into
 #	work/build-p9.
@@ -25,12 +26,13 @@ log=$work/build-p9.log
 [ -f "$work/build-ref/strgen.cmake" ] || fatal "no host tools: run build_ref.sh"
 clang-17 -O1 -c "$top/nothreads.c" -o "$work/nothreads.o"
 clang-17 -O1 -c "$top/../phase0/plan9/draw_none.c" -o "$work/draw_none.o"
+clang-17 -O1 -c "$top/../phase0/plan9/audio_none.c" -o "$work/audio_none.o"
 cmake -S "$p9" -B "$b" -G Ninja -Wno-dev \
 	-DCMAKE_BUILD_TYPE=Release \
 	-DCMAKE_C_COMPILER=clang-17 \
 	-DCMAKE_CXX_COMPILER=clang++-17 \
 	-DCMAKE_CXX_FLAGS="-stdlib=libc++" \
-	-DCMAKE_EXE_LINKER_FLAGS="-stdlib=libc++ $work/nothreads.o $work/draw_none.o" \
+	-DCMAKE_EXE_LINKER_FLAGS="-stdlib=libc++ $work/nothreads.o $work/draw_none.o $work/audio_none.o" \
 	-DOPTION_DEDICATED=OFF \
 	-DOPTION_PLAN9_VIDEO=ON \
 	-DCMAKE_DISABLE_FIND_PACKAGE_Freetype=ON \

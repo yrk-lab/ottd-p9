@@ -26,7 +26,9 @@
 #	  "click" presses and releases the left button, anything else
 #	  goes to the monitor (sendkey right 2000; sendkey grave_accent).
 #	  With guirio=1 the game runs in a rio window (800x600 at 40,40)
-#	  and with guiresize=n is made 960x700 after n seconds;
+#	  and with guiresize=n is made 960x700 after n seconds.  With
+#	  guiaudio=1 the game has the Plan 9 sound and music drivers and
+#	  QEMU an Intel HDA card, whose output is work/9front-audio.wav;
 #	- a dedicated server: once it is up, the stock Linux build joins
 #	  it as a client through QEMU's port forward (host port 13979)
 #	  for $clienttime seconds (default 60); the server must report the
@@ -90,19 +92,21 @@ if(~ $p9test ottd){
 	# the screen (vgasize, monitor, mouseport from the boot line):
 	# termrc sets it up after termrc.local
 	screenrc
+	# the sound card, if QEMU has one (guiaudio=1)
+	bind -a '#A' /dev >[2]/dev/null
 	srv -nc tcp!10.0.2.100!565 ottd /n/ottdfs
 	# a way in, for the host (vmsh, vmfs): rc, and the namespace by
 	# exportfs, on ports QEMU forwards from this machine only
 	aux/listen1 -t tcp!*!17019 /bin/rc &
 	aux/listen1 -t tcp!*!17564 /bin/exportfs -s &
 	bind /n/ottdfs/ottd /n/ottd
-	objtype=amd64 NPROC=2 ticks=TICKS guitime=GUITIME guishots=(GUISHOTS) guirio=GUIRIO guiresize=(GUIRESIZE) netdebug=NETDEBUG rc /n/ottd/phase2/build.rc >/n/ottd/phase2/work/9f/results.txt >[2=1]
+	objtype=amd64 NPROC=2 ticks=TICKS guitime=GUITIME guishots=(GUISHOTS) guirio=GUIRIO guiresize=(GUIRESIZE) guiaudio=GUIAUDIO netdebug=NETDEBUG rc /n/ottd/phase2/build.rc >/n/ottd/phase2/work/9f/results.txt >[2=1]
 	cat /n/ottd/phase2/work/9f/results.txt
 	if(! ~ KEEP 1)
 		echo reboot >/dev/reboot
 }
 RC
-sed -i "s/TICKS/${ticks:-100000}/; s/GUITIME/${guitime:-120}/; s/GUISHOTS/${guishots:-20}/; s/NETDEBUG/${netdebug:-3}/; s/GUIRIO/${guirio:-0}/; s/GUIRESIZE/${guiresize:-}/; s/KEEP/${keep:-0}/" "$root/rc/bin/termrc.local"
+sed -i "s/TICKS/${ticks:-100000}/; s/GUITIME/${guitime:-120}/; s/GUISHOTS/${guishots:-20}/; s/NETDEBUG/${netdebug:-3}/; s/GUIRIO/${guirio:-0}/; s/GUIAUDIO/${guiaudio:-0}/; s/GUIRESIZE/${guiresize:-}/; s/KEEP/${keep:-0}/" "$root/rc/bin/termrc.local"
 
 accel=
 wrap=
@@ -113,6 +117,13 @@ elif id -nG "$(id -un)" | grep -qw kvm && sudo -n true 2>/dev/null; then
 	wrap="sudo -n setpriv --reuid=$(id -u) --regid=$(id -g) --init-groups"
 fi
 fs=10.0.2.100
+# with guiaudio=1, an Intel HDA card whose output QEMU records
+audiodev=
+audioconf=
+if [ "${guiaudio:-}" = 1 ]; then
+	audiodev="-audiodev wav,id=snd0,path=$here/work/9front-audio.wav -device intel-hda -device hda-output,audiodev=snd0"
+	audioconf="audio0=type=hda"	# 9front attaches the cards plan9.ini names; its pc64 kernel has HDA, not AC97
+fi
 u9fs="unshare -r $nine/u9fs -a none -u $(id -un) $root"
 # u9fs chroots to the tree it serves and looks users up in its
 # etc/passwd: the repository is served bind-mounted on ottd in a tree
@@ -128,9 +139,9 @@ fwd="hostfwd=tcp:127.0.0.1:13979-:3979,hostfwd=udp:127.0.0.1:13979-:3979"
 fwd="$fwd,hostfwd=tcp:127.0.0.1:17019-:17019,hostfwd=tcp:127.0.0.1:17564-:17564"
 $wrap timeout ${timeout:-7200} qemu-system-x86_64 $accel -m 4G -smp 2 -nographic -no-reboot \
 	-kernel "$nine/9pc64" \
-	-append "nobootprompt=tcp fs=$fs auth=$fs console=0 b115200 user=glenda p9test=ottd vgasize=1024x768x32 monitor=vesa mouseport=ps2" \
+	-append "nobootprompt=tcp fs=$fs auth=$fs console=0 b115200 user=glenda p9test=ottd vgasize=1024x768x32 monitor=vesa mouseport=ps2 $audioconf" \
 	-netdev "user,id=net0,guestfwd=tcp:$fs:564-cmd:$u9fs,guestfwd=tcp:$fs:565-cmd:$u9repo,$fwd" \
-	-device e1000,netdev=net0 \
+	-device e1000,netdev=net0 $audiodev \
 	-monitor "unix:$here/work/qemu.mon,server=on,wait=off" \
 	>"$here/work/9front-console.log" 2>&1 &
 qemu=$!

@@ -60,4 +60,32 @@ While it runs, rio's windows can be looked at from the host: `./vmsh 'mount /srv
 cat /n/rio/wsys/*/label'` (rio wants a window id as attach name; reading a wctl twice waits for the next
 change).
 
-The title screen's game plays (liblzma, ../phase2/README.md).  Not yet: sound and music (null drivers).
+The title screen's game plays (liblzma, ../phase2/README.md).
+
+## Sound and music (issue #9)
+
+`src/sound/plan9_s.cpp` and `src/music/plan9_m.cpp` (`../phase1/patches/plan9-audio.patch`), translated with
+the game, over a shim of ints and pointers (`../phase0/plan9/p9audio.h`):
+
+- sound: there are no threads, so the mixer runs in the game's process, in the sound driver's MainLoop (once a
+  tick, as Allegro's): it mixes as much as the shim takes, up to 186 ms ahead, into a ring that a helper process
+  (rfork RFMEM) writes to `/dev/audio`, whose writes keep the pace (`audio9f.c`). The mixer itself never leaves
+  the game's process: the runtime's mutexes are no-ops.
+- music: OpenMSX's songs are MIDI files; `games/dmid` (with Freedoom's GENMIDI bank, which setup.sh fetches)
+  makes them OPL3 instructions and `games/opl3` plays them; a helper reads the pipeline's PCM into a second ring,
+  which the mixer takes as its music source (`MxSetMusicSource`, as FluidSynth's driver), so one writer has
+  /dev/audio. A full ring holds the pipeline back: music is made as fast as it is played.
+- plan9port (`audiop9p.c`): no /dev/audio; with `$p9audio` the sound goes to that file, paced by the clock (no
+  music). `audio_none.c` for goken and the native builds: the game takes the null drivers.
+
+setup.sh installs OpenSFX and OpenMSX next to OpenGFX (the gate's saves do not change).
+
+Checked:
+
+	p9audio=$PWD/work/audio.pcm sound=plan9 input=newgame.input shots=30 runtime=40 ./run_p9p.sh
+	ticks=100 gui=1 guiaudio=1 guitime=80 guiinput=../phase3/newgame9f.input ../phase2/run9front.sh
+
+The second gives QEMU an Intel HDA card (9front's pc64 kernel has HDA, not AC97; `audio0=type=hda` on the boot
+line) whose output QEMU records, `../phase2/work/9front-audio.wav`: the music and the game's sounds, continuous.
+While it plays, `./vmsh ps` shows the game's audio writer in Pwrite on /dev/audio and dmid and opl3 waiting on
+a full pipe.

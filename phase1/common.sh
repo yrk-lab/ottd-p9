@@ -15,6 +15,9 @@ p9=$work/src-p9			# with patches/series applied
 data=$work/data			# XDG_DATA_HOME for test runs: baseset
 
 opengfx=7.1
+opensfx=1.0.3			# the free sound set (Phase 3, sound)
+openmsx=0.4.2			# the free music set (MIDI)
+freedoom=0.13.0			# its GENMIDI lump: the instrument bank 9front's games/dmid plays MIDI with
 zlibtag=v1.3.1			# the system's version, so native and translated builds agree
 zlib=$work/zlib			# its sources, translated with the program
 xztag=v5.8.3			# liblzma: the system's version too

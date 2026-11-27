@@ -511,3 +511,14 @@ Next steps now (replace section 10's first two items):
   measured from screenshots (menu not centred alike; 30px off hit main menu Exit -> game quit cleanly, looked
   like a crash). vmsh into rio: mount /srv/rio.glenda.N /n/rio 1 (needs window id aname); 2nd wctl read blocks
   until change. vmsh/listen1 "incoming call" kernel prints show on the screen console (cosmetic).
+- SOUND+MUSIC (2026-11-27, #9): plan9-audio.patch (src/sound/plan9_s.cpp mixes in SoundDriver::MainLoop - called
+  every tick from openttd.cpp GameLoop; src/music/plan9_m.cpp: MidiFile::GetSMFFile + MxSetMusicSource callback).
+  Shim p9audio.h: audio9f.c (ring 8192 frames + RFMEM writer to /dev/audio; music: rfork RFPROC|RFFDG|RFNOTEG
+  child execs rc -c 'games/dmid -i $p9genmidi file | games/opl3', RFMEM reader into ring, backpressure; stop =
+  postnote PNGROUP kill), audiop9p.c ($p9audio PCM file paced by clock), audio_none.c (goken, native).
+  setup.sh: OpenSFX 1.0.3, OpenMSX 0.4.2 (cdn.openttd.org refuses HEAD: 405; GET works), Freedoom 0.13.0 GENMIDI
+  lump -> work/data/genmidi. Gate unchanged with the sets present.
+  9front audio: pc64 kernel has audiohda only (audioac97 commented out) -> QEMU -device intel-hda -device
+  hda-output,audiodev=snd0 + -audiodev wav,path=...; boot line audio0=type=hda; termrc.local bind -a '#A' /dev.
+  QEMU's wav backend writes its header at exit (shut the VM down before reading). Recorded 40 s, music+sound.
+  Gotcha again: editing run9front.sh while a run executes it (bash reads incrementally) - don't.

@@ -32,14 +32,14 @@ ln -sfn "$data/openttd/baseset" "$c/data/openttd/baseset"
 [ -f "$c/openttd.cfg" ] || printf '[misc]\nsavegame_format = none\n[gui]\nautosave = off\n' >"$c/openttd.cfg"
 cd "$o" || exit 1
 if [ -z "${input:-}${shots:-}" ]; then
-	XDG_DATA_HOME=$c/data XDG_CONFIG_HOME=$c/config ./openttd -x -c "$c/openttd.cfg" -v plan9 -s null -m null "$@"
+	XDG_DATA_HOME=$c/data XDG_CONFIG_HOME=$c/config ./openttd -x -c "$c/openttd.cfg" -v plan9 -s "${sound:-null}" -m null "$@"
 	exit
 fi
 
 w=$here/work
 rm -f "$w"/shot.*
 XDG_DATA_HOME=$c/data XDG_CONFIG_HOME=$c/config p9drawshot=$w/shot p9drawshotat="${shots:-20}" \
-	./openttd -x -c "$c/openttd.cfg" -v plan9 -s null -m null "$@" >"$w/log" 2>&1 &
+	./openttd -x -c "$c/openttd.cfg" -v plan9 -s "${sound:-null}" -m null "$@" >"$w/log" 2>&1 &
 pid=$!
 for i in $(seq 60); do
 	[ -f "$w/shot.ready" ] && break

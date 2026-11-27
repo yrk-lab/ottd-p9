@@ -1,0 +1,245 @@
+--- src-ref/src/sound/plan9_s.cpp	1970-01-01 01:00:00.000000000 +0100
++++ src-p9/src/sound/plan9_s.cpp	1970-01-01 01:00:00.000000000 +0100
+@@ -0,0 +1,57 @@
++/*
++ * This file is part of OpenTTD.
++ * OpenTTD is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 2.
++ * OpenTTD is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
++ * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <https://www.gnu.org/licenses/old-licenses/gpl-2.0>.
++ */
++
++/**
++ * @file plan9_s.cpp Sound on Plan 9.
++ *
++ * There are no threads, so the mixer runs here, once a tick (MainLoop),
++ * as with Allegro: it mixes as much as the shim can take, a little
++ * ahead of what is playing, and the shim (phase0/plan9/audio9f.c on
++ * 9front) has a process of its own that writes it to /dev/audio.  The
++ * interface is C, ints and pointers only.
++ */
++
++#include "../stdafx.h"
++#include "../mixer.h"
++#include "../debug.h"
++#include "plan9_s.h"
++
++#include "../safeguards.h"
++
++extern "C" {
++	int p9audio_open(int rate);
++	int p9audio_space(void);
++	void p9audio_write(short *buf, int frames);
++	void p9audio_close(void);
++}
++
++static FSoundDriver_Plan9 iFSoundDriver_Plan9;
++
++static const int MIX_CHUNK = 1024; ///< Frames mixed at a time.
++static std::vector<int16_t> _p9_mix; ///< One chunk, stereo.
++
++std::optional<std::string_view> SoundDriver_Plan9::Start(const StringList &param)
++{
++	int hz = GetDriverParamInt(param, "hz", 44100);
++	if (p9audio_open(hz) < 0) return "no Plan 9 audio device";
++	_p9_mix.assign(2 * MIX_CHUNK, 0);
++	MxInitialize(hz);
++	return std::nullopt;
++}
++
++void SoundDriver_Plan9::Stop()
++{
++	p9audio_close();
++}
++
++void SoundDriver_Plan9::MainLoop()
++{
++	while (p9audio_space() >= MIX_CHUNK) {
++		MxMixSamples(_p9_mix.data(), MIX_CHUNK);
++		p9audio_write(_p9_mix.data(), MIX_CHUNK);
++	}
++}
+--- src-ref/src/sound/plan9_s.h	1970-01-01 01:00:00.000000000 +0100
++++ src-p9/src/sound/plan9_s.h	1970-01-01 01:00:00.000000000 +0100
+@@ -0,0 +1,31 @@
++/*
++ * This file is part of OpenTTD.
++ * OpenTTD is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 2.
++ * OpenTTD is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
++ * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <https://www.gnu.org/licenses/old-licenses/gpl-2.0>.
++ */
++
++/** @file plan9_s.h Base for the Plan 9 sound driver. */
++
++#ifndef SOUND_PLAN9_H
++#define SOUND_PLAN9_H
++
++#include "sound_driver.hpp"
++
++/** The Plan 9 sound driver: /dev/audio, through a small C shim. */
++class SoundDriver_Plan9 : public SoundDriver {
++public:
++	std::optional<std::string_view> Start(const StringList &param) override;
++	void Stop() override;
++	void MainLoop() override;
++	std::string_view GetName() const override { return "plan9"; }
++};
++
++/** Factory for the Plan 9 sound driver. */
++class FSoundDriver_Plan9 : public DriverFactoryBase {
++public:
++	FSoundDriver_Plan9() : DriverFactoryBase(Driver::DT_SOUND, 9, "plan9", "Plan 9 Sound Driver") {}
++	std::unique_ptr<Driver> CreateInstance() const override { return std::make_unique<SoundDriver_Plan9>(); }
++};
++
++#endif /* SOUND_PLAN9_H */
+--- src-ref/src/sound/CMakeLists.txt	2026-04-04 16:16:04.000000000 +0100
++++ src-p9/src/sound/CMakeLists.txt	2026-11-27 16:09:05.448045468 +0000
+@@ -35,3 +35,9 @@
+     null_s.cpp
+     null_s.h
+ )
++
++add_files(
++    plan9_s.cpp
++    plan9_s.h
++    CONDITION OPTION_PLAN9_VIDEO
++)
+--- src-ref/src/music/plan9_m.cpp	1970-01-01 01:00:00.000000000 +0100
++++ src-p9/src/music/plan9_m.cpp	1970-01-01 01:00:00.000000000 +0100
+@@ -0,0 +1,87 @@
++/*
++ * This file is part of OpenTTD.
++ * OpenTTD is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 2.
++ * OpenTTD is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
++ * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <https://www.gnu.org/licenses/old-licenses/gpl-2.0>.
++ */
++
++/**
++ * @file plan9_m.cpp Music on Plan 9.
++ *
++ * The song, as a standard MIDI file, is played by an external pipeline
++ * (on 9front, games/dmid into games/opl3: phase0/plan9/audio9f.c), whose
++ * sound the mixer takes as its music source, so the music goes out with
++ * the sound effects through the Plan 9 sound driver.
++ */
++
++#include "../stdafx.h"
++#include "../mixer.h"
++#include "../debug.h"
++#include "../base_media_base.h"
++#include "midifile.hpp"
++#include "plan9_m.h"
++
++#include "../safeguards.h"
++
++extern "C" {
++	int p9music_play(char *file, int rate);
++	void p9music_stop(void);
++	int p9music_playing(void);
++	int p9music_read(short *buf, int frames);
++}
++
++static FMusicDriver_Plan9 iFMusicDriver_Plan9;
++
++static uint32_t _p9_music_rate; ///< The mixer's rate.
++static int _p9_music_volume = 127; ///< 0..127.
++static std::vector<int16_t> _p9_music_buf; ///< What the pipeline gave.
++
++/** The mixer's music source: the pipeline's sound, at the volume, added in. */
++static void RenderMusicStream(int16_t *buffer, size_t samples)
++{
++	if (_p9_music_buf.size() < 2 * samples) _p9_music_buf.resize(2 * samples);
++	int n = p9music_read(_p9_music_buf.data(), static_cast<int>(samples));
++	for (int i = 0; i < 2 * n; i++) {
++		buffer[i] = static_cast<int16_t>(Clamp(buffer[i] + _p9_music_buf[i] * _p9_music_volume / 127, INT16_MIN, INT16_MAX));
++	}
++}
++
++std::optional<std::string_view> MusicDriver_Plan9::Start(const StringList &)
++{
++	/* The rate is the Plan 9 sound driver's (44100 Hz, which games/opl3
++	 * plays at), or the mixer's default when another sound driver runs:
++	 * then the shim plays no song. */
++	_p9_music_rate = MxSetMusicSource(RenderMusicStream);
++	return std::nullopt;
++}
++
++void MusicDriver_Plan9::Stop()
++{
++	p9music_stop();
++	MxSetMusicSource(nullptr);
++}
++
++void MusicDriver_Plan9::PlaySong(const MusicSongInfo &song)
++{
++	std::string filename = MidiFile::GetSMFFile(song);
++	p9music_stop();
++	if (filename.empty()) return;
++	if (p9music_play(filename.data(), static_cast<int>(_p9_music_rate)) < 0) {
++		Debug(driver, 1, "plan9: cannot play {}", filename);
++	}
++}
++
++void MusicDriver_Plan9::StopSong()
++{
++	p9music_stop();
++}
++
++bool MusicDriver_Plan9::IsSongPlaying()
++{
++	return p9music_playing() != 0;
++}
++
++void MusicDriver_Plan9::SetVolume(uint8_t vol)
++{
++	_p9_music_volume = vol;
++}
+--- src-ref/src/music/plan9_m.h	1970-01-01 01:00:00.000000000 +0100
++++ src-p9/src/music/plan9_m.h	1970-01-01 01:00:00.000000000 +0100
+@@ -0,0 +1,34 @@
++/*
++ * This file is part of OpenTTD.
++ * OpenTTD is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 2.
++ * OpenTTD is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
++ * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <https://www.gnu.org/licenses/old-licenses/gpl-2.0>.
++ */
++
++/** @file plan9_m.h Base for the Plan 9 music driver. */
++
++#ifndef MUSIC_PLAN9_H
++#define MUSIC_PLAN9_H
++
++#include "music_driver.hpp"
++
++/** The Plan 9 music driver: MIDI played by 9front's games/dmid and games/opl3, mixed with the sound. */
++class MusicDriver_Plan9 : public MusicDriver {
++public:
++	std::optional<std::string_view> Start(const StringList &param) override;
++	void Stop() override;
++	void PlaySong(const MusicSongInfo &song) override;
++	void StopSong() override;
++	bool IsSongPlaying() override;
++	void SetVolume(uint8_t vol) override;
++	std::string_view GetName() const override { return "plan9"; }
++};
++
++/** Factory for the Plan 9 music driver. */
++class FMusicDriver_Plan9 : public DriverFactoryBase {
++public:
++	FMusicDriver_Plan9() : DriverFactoryBase(Driver::DT_MUSIC, 9, "plan9", "Plan 9 Music Driver") {}
++	std::unique_ptr<Driver> CreateInstance() const override { return std::make_unique<MusicDriver_Plan9>(); }
++};
++
++#endif /* MUSIC_PLAN9_H */
+--- src-ref/src/music/CMakeLists.txt	2026-04-04 16:16:04.000000000 +0100
++++ src-p9/src/music/CMakeLists.txt	2026-11-27 16:09:05.449454068 +0000
+@@ -49,3 +49,9 @@
+     null_m.cpp
+     null_m.h
+ )
++
++add_files(
++    plan9_m.cpp
++    plan9_m.h
++    CONDITION OPTION_PLAN9_VIDEO
++)
