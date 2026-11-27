@@ -6,8 +6,8 @@
 #	(header, data.c, fnNNN.c of about 4 MB) -> goken 6c, 4 at a time
 #	-> 6l with the Plan 9 runtime (rt_p9, libc_p9, os_p9, eh_rt, the
 #	generated wrappers), no network (net_none: goken has no dial
-#	or announce), a malloc in place of goken's placeholder
-#	(malloc_goken) and goken's libc.
+#	or announce) or draw device (draw_none), a malloc in place of
+#	goken's placeholder (malloc_goken) and goken's libc.
 #	Writes work/p9/missing.txt: what the link still lacks.
 set -uo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
@@ -35,12 +35,12 @@ cd "$p9/u"
 ls fn*.c data.c |
 	/usr/bin/xargs -P4 -I{} sh -c "6c -w -I $p0/plan9/shim {} >{}.log 2>&1 || echo {}: 6c FAILED"
 6c -w -Damd64 $inc $ehinc invoke.c || fatal "invoke.c failed"
-for f in "$p0/plan9/rt_p9.c" "$p0/plan9/libc_p9.c" "$p0/plan9/os_p9.c" "$p0/plan9/net_none.c" "$p0/plan9/malloc_goken.c" "$p0/eh/eh_rt.c"; do
+for f in "$p0/plan9/rt_p9.c" "$p0/plan9/libc_p9.c" "$p0/plan9/os_p9.c" "$p0/plan9/net_none.c" "$p0/plan9/draw_none.c" "$p0/plan9/malloc_goken.c" "$p0/eh/eh_rt.c"; do
 	6c -w -Damd64 $inc $ehinc -o "$(basename "$f" .c).6" "$f" || fatal "$f failed"
 done
 
 echo "== 6l"
-objs="data.6 fn*.6 invoke.6 rt_p9.6 libc_p9.6 os_p9.6 net_none.6 malloc_goken.6 eh_rt.6"
+objs="data.6 fn*.6 invoke.6 rt_p9.6 libc_p9.6 os_p9.6 net_none.6 draw_none.6 malloc_goken.6 eh_rt.6"
 if 6l -L "$goken/ROOT/arch/amd64/lib" -H7 -E _main -o openttd.exe $objs -lc >6l.log 2>&1; then
 	# the data OpenTTD finds next to its executable, as phase1/translate.sh
 	for d in lang ai game baseset media bin; do

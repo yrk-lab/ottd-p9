@@ -31,6 +31,9 @@ enum
 	Einval		= 22,
 	Enosys		= 38,
 
+	/* the *at calls */
+	Atfdcwd		= -100,
+
 	/* sysconf */
 	Scclktck	= 2,
 	Scpagesize	= 30,
@@ -188,6 +191,123 @@ int
 dup2(int old, int new)
 {
 	return dup(old, new);
+}
+
+/*
+ * File calls std::filesystem links but OpenTTD does not make: sizes can
+ * be set (a Plan 9 wstat), the rest has no Plan 9 meaning or is not
+ * needed (permissions, links, times, the *at forms) and fails.
+ */
+
+static void
+setlength(Dir *d, vlong len)
+{
+	nulldir(d);
+	d->length = len;
+}
+
+int
+ftruncate(int fd, vlong len)
+{
+	Dir d;
+
+	setlength(&d, len);
+	if(dirfwstat(fd, &d) < 0){
+		c_seterrno();
+		return -1;
+	}
+	return 0;
+}
+
+int
+truncate(char *path, vlong len)
+{
+	Dir d;
+
+	setlength(&d, len);
+	if(dirwstat(path, &d) < 0){
+		c_seterrno();
+		return -1;
+	}
+	return 0;
+}
+
+static int
+nosys(void)
+{
+	seterr(Enosys);
+	return -1;
+}
+
+int
+fchmod(int, uint)
+{
+	return nosys();
+}
+
+int
+fchmodat(int, char*, uint, int)
+{
+	return nosys();
+}
+
+int
+link(char*, char*)
+{
+	return nosys();
+}
+
+int
+symlink(char*, char*)
+{
+	return nosys();
+}
+
+/* no symbolic links: nothing is one */
+vlong
+readlink(char*, char*, uvlong)
+{
+	seterr(Einval);
+	return -1;
+}
+
+vlong
+sendfile(int, int, vlong*, uvlong)
+{
+	return nosys();
+}
+
+int
+utimensat(int, char*, void*, int)
+{
+	return nosys();
+}
+
+/* AT_FDCWD only */
+int
+unlinkat(int dirfd, char *path, int)
+{
+	if(dirfd != Atfdcwd)
+		return nosys();
+	if(remove(path) < 0){
+		c_seterrno();
+		return -1;
+	}
+	return 0;
+}
+
+void*
+fdopen(int, char*)
+{
+	seterr(Enosys);
+	return nil;
+}
+
+void*
+fdopendir(int)
+{
+	seterr(Enosys);
+	return nil;
 }
 
 int
@@ -433,6 +553,14 @@ void*
 signal(int, void*)
 {
 	return nil;	/* SIG_DFL */
+}
+
+/* the external MIDI player's: no process is ever started (execvp fails) */
+int
+kill(int, int)
+{
+	seterr(Enosys);
+	return -1;
 }
 
 int

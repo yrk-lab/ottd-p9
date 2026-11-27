@@ -33,6 +33,51 @@ LLVM made module-level names unique, and C++ file-local names are mangled.
     first; Plan 9 dial/announce later)
   - 1-byte atomics
 
+## Phase 2.5: unit by unit (2026-11-27)
+
+The whole-program link made every change rewrite 2-3 GB (the linked module, ~150 MB, several times; three
+140 MB C files; the split copy; a copy into the 9front root). Now the source's structure is kept: each of
+OpenTTD's units (and zlib's, and the libc++ modules the program needs, 538 in all) becomes one flat C file
+(`script/api/script_map.cpp` -> `script_api_script_map.c`) and one object, and generated mkfiles rebuild only
+what changed. `buildtu.sh` drives it (`../phase0/tu/build.sh`), into `work/tu`:
+
+- `trans.mk` (plan9port's mk, on Linux): each unit's symbol table (`symtab.py`), then, outside mk, the
+  shared symbols' homes (`homes.py`), then each unit's translation (`unit.sh`: `localize.py`, the exception
+  lowering, llvm-cbe, `lower.py --libc --unit`), its steps in `/dev/shm`, its C file written only if it changed;
+- `invoke.c` (the union of the units' exception wrappers, `mergeinvoke.py`) and `ctors.c` (the constructor
+  table, `mkctors.py`), also written only if they changed;
+- `mkfile` (mk on 9front, plan9port's on Linux): `mk SYS=goken` or `mk SYS=9front`, each with its
+  `config.$SYS` and its own object directory.
+
+What a static linker did is now done before translating. C++ puts inline functions, templates, vtables,
+typeinfo, static locals and template statics in every unit that uses them (linkonce, weak); 6l has no weak
+symbols, so each gets one home unit (the unit with an ordinary definition, else the first in link order),
+and elsewhere becomes a declaration (available_externally, then LLVM's elim-avail-extern): one copy of each
+static local, one address per function, as C++ requires. Function aliases (C1/D1 for C2/D2) become copies of
+their target; the one inline assembly (OpenTTD's cpuid) reads as "no features". The whole program's dead-code
+pass no longer hides unused code, so the runtime gained what libc++'s unused parts call (the "C" locale's
+`_l` functions, wide conversions, file calls, `exception_ptr`), and llvm-cbe two fixes (the structs its
+overflow helpers return; extern arrays of unknown size).
+
+A build with nothing changed does nothing; a change to one unit translates and compiles that unit and links.
+Three systems build the same tree, each into its own object directory:
+- `goken` (kencc on Linux): passes the Phase 1 gate (both scenarios identical to the translated Linux
+  build, 100000 ticks);
+- `9front`: built in place. `run9front.sh` serves the repository with a second u9fs (u9fs chroots to what it
+  serves and looks users up in its etc/passwd, so the repository is bind-mounted into a small tree that has
+  one) and `build.rc` runs `mk SYS=9front` in it: nothing is copied, objects persist across boots. A full
+  build is 10 minutes, the link 6; a boot after a one-file change about 7 minutes in all. The gate passes
+  (`gate.sh cmp tr 9front`: same world and regression saves), so do the socket test and the dedicated
+  server with the stock client;
+- `linux` (`sys="goken linux" buildtu.sh`): gcc and glibc, for the Phase 3 loop with plan9port's libdraw.
+  The units' `c_` names are glibc's again (`unrename.h`), `main_unix.c` runs the constructors, and
+  `-fpack-struct` is the 6c `#pragma pack on` that gcc ignores (cbe pads every struct explicitly; unpacked,
+  a libc++ tree node grew and the heap broke). Passes the gate too.
+
+Names the Plan 9 libraries define as well as the program: libdraw's `display`, `font`, `screen` and
+`_screen` (OpenTTD has a global `_screen`; C++ does not mangle namespace-scope variables) are renamed
+`p_<name>` by lower.py. 9front's libc has no `openat`, goken's does: `os9f.c` is linked on 9front only.
+
 ## Sockets: the dedicated server takes a client (2026-11-26)
 
 The BSD socket calls run on Plan 9 networking (`../phase0/plan9/net_p9.c`): TCP and UDP over IPv4, through

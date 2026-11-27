@@ -1,0 +1,430 @@
+--- src-ref/src/video/plan9_v.cpp	1970-01-01 01:00:00.000000000 +0100
++++ src-p9/src/video/plan9_v.cpp	1970-01-01 01:00:00.000000000 +0100
+@@ -0,0 +1,345 @@
++/*
++ * This file is part of OpenTTD.
++ * OpenTTD is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 2.
++ * OpenTTD is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
++ * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <http://www.gnu.org/licenses/>.
++ */
++
++/**
++ * @file plan9_v.cpp Video driver for Plan 9's draw device.
++ *
++ * The game draws with a 32bpp blitter into a buffer here; Paint hands
++ * the dirty rectangles to a small Plan 9 C shim (p9draw_*), which loads
++ * them into an image and draws it on the window, and which reports the
++ * mouse, the keyboard and resizes.  The shim's interface has only ints,
++ * pointers and Plan 9 runes, so it means the same on both sides.
++ * No game thread: the main loop runs the game and draws.
++ */
++
++#include "../stdafx.h"
++#include "../openttd.h"
++#include "../gfx_func.h"
++#include "../palette_func.h"
++#include "../blitter/factory.hpp"
++#include "../core/math_func.hpp"
++#include "../framerate_type.h"
++#include "../window_func.h"
++#include "plan9_v.h"
++
++#include "../safeguards.h"
++
++extern "C" {
++	/** An event from the shim. */
++	struct P9Event {
++		int type; ///< One of P9E_*.
++		int x;    ///< Mouse: position in the window.
++		int y;
++		int buttons; ///< Mouse: 1 left, 2 middle, 4 right, 8 and 16 the wheel.
++		int rune;    ///< Key: the Plan 9 rune.
++	};
++
++	int p9draw_init(const char *label, int *w, int *h);
++	void p9draw_exit(void);
++	void p9draw_flush(const uint32_t *buf, int pitch, int x, int y, int w, int h);
++	int p9draw_event(P9Event *e);
++	void p9draw_warp(int x, int y);
++}
++
++enum {
++	P9E_NONE,
++	P9E_MOUSE,  ///< The mouse moved or a button changed.
++	P9E_CHAR,   ///< A character was typed (or repeated).
++	P9E_KEYDOWN, ///< A key went down (state only, as Kshift).
++	P9E_KEYUP,   ///< A key went up.
++	P9E_RESIZE, ///< The window changed size: x, y.
++	P9E_EXIT,   ///< The window was deleted.
++};
++
++/** Plan 9 runes for special keys, from keyboard.h. */
++enum : char32_t {
++	KF = 0xF000,
++	Kview = 0xF800,
++	Khome = KF | 0x0D,
++	Kup = KF | 0x0E,
++	Kdown = Kview,
++	Kpgup = KF | 0x0F,
++	Kprint = KF | 0x10,
++	Kleft = KF | 0x11,
++	Kright = KF | 0x12,
++	Kpgdown = KF | 0x13,
++	Kins = KF | 0x14,
++	Kalt = KF | 0x15,
++	Kshift = KF | 0x16,
++	Kctl = KF | 0x17,
++	Kend = KF | 0x18,
++	Kpause = KF | 0x24,
++	Kbs = 0x08,
++	Kdel = 0x7f,
++	Kesc = 0x1b,
++};
++
++static FVideoDriver_Plan9 iFVideoDriver_Plan9;
++
++static std::vector<uint32_t> _p9_buffer; ///< The screen, 32 bpp.
++static Rect _p9_dirty;                   ///< Union of the dirty rectangles.
++static bool _p9_has_dirty;
++static Palette _p9_palette;
++
++/* Keys held, as the key events tell: modifiers and the direction keys. */
++static bool _p9_shift, _p9_ctrl, _p9_alt, _p9_tab;
++static uint _p9_dirkeys;
++
++void VideoDriver_Plan9::MakeDirty(int left, int top, int width, int height)
++{
++	Rect r = { left, top, left + width, top + height };
++	if (!_p9_has_dirty) {
++		_p9_dirty = r;
++		_p9_has_dirty = true;
++		return;
++	}
++	_p9_dirty.left = std::min(_p9_dirty.left, r.left);
++	_p9_dirty.top = std::min(_p9_dirty.top, r.top);
++	_p9_dirty.right = std::max(_p9_dirty.right, r.right);
++	_p9_dirty.bottom = std::max(_p9_dirty.bottom, r.bottom);
++}
++
++void VideoDriver_Plan9::Paint()
++{
++	PerformanceMeasurer framerate(PFE_VIDEO);
++
++	if (!_p9_has_dirty) return;
++	_p9_has_dirty = false;
++
++	int left = Clamp(_p9_dirty.left, 0, _screen.width);
++	int top = Clamp(_p9_dirty.top, 0, _screen.height);
++	int right = Clamp(_p9_dirty.right, 0, _screen.width);
++	int bottom = Clamp(_p9_dirty.bottom, 0, _screen.height);
++	if (left >= right || top >= bottom) return;
++	p9draw_flush(_p9_buffer.data(), _screen.pitch, left, top, right - left, bottom - top);
++}
++
++void VideoDriver_Plan9::CheckPaletteAnim()
++{
++	if (!CopyPalette(_p9_palette)) return;
++
++	Blitter *blitter = BlitterFactory::GetCurrentBlitter();
++	switch (blitter->UsePaletteAnimation()) {
++		case Blitter::PaletteAnimation::Blitter:
++			blitter->PaletteAnimate(_p9_palette);
++			break;
++
++		case Blitter::PaletteAnimation::VideoBackend: // only 8 bpp, which this driver does not take
++		case Blitter::PaletteAnimation::None:
++			break;
++
++		default:
++			NOT_REACHED();
++	}
++}
++
++bool VideoDriver_Plan9::CreateMainSurface(int w, int h)
++{
++	if (BlitterFactory::GetCurrentBlitter()->GetScreenDepth() != 32) {
++		Debug(driver, 0, "plan9: the blitter must draw 32 bpp");
++		return false;
++	}
++
++	_screen.width = w;
++	_screen.height = h;
++	_screen.pitch = w;
++	_p9_buffer.assign(static_cast<size_t>(w) * h, 0);
++	_screen.dst_ptr = _p9_buffer.data();
++	_cur_resolution.width = w;
++	_cur_resolution.height = h;
++
++	BlitterFactory::GetCurrentBlitter()->PostResize();
++	CopyPalette(_p9_palette, true);
++	GameSizeChanged();
++	MarkWholeScreenDirty();
++	return true;
++}
++
++std::optional<std::string_view> VideoDriver_Plan9::Start(const StringList &)
++{
++	int w, h;
++
++	std::string caption = VideoDriver::GetCaption();
++	if (p9draw_init(caption.c_str(), &w, &h) < 0) return "no Plan 9 draw device";
++
++	_resolutions.clear();
++	_resolutions.emplace_back(w, h);
++	if (!this->CreateMainSurface(w, h)) {
++		p9draw_exit();
++		return "the Plan 9 video driver needs a 32 bpp blitter";
++	}
++
++	this->is_game_threaded = false;
++	return std::nullopt;
++}
++
++void VideoDriver_Plan9::Stop()
++{
++	p9draw_exit();
++}
++
++/** The OpenTTD key code of a typed Plan 9 rune, without the modifiers. */
++static uint KeyCode(char32_t r)
++{
++	if (r >= (KF | 1) && r <= (KF | 12)) return WKC_F1 + (r - (KF | 1));
++	switch (r) {
++		case Kesc: return WKC_ESC;
++		case Kbs: return WKC_BACKSPACE;
++		case Kdel: return WKC_DELETE;
++		case Kins: return WKC_INSERT;
++		case Kpgup: return WKC_PAGEUP;
++		case Kpgdown: return WKC_PAGEDOWN;
++		case Kend: return WKC_END;
++		case Khome: return WKC_HOME;
++		case Kleft: return WKC_LEFT;
++		case Kup: return WKC_UP;
++		case Kright: return WKC_RIGHT;
++		case Kdown: return WKC_DOWN;
++		case '\n': return WKC_RETURN;
++		case '\r': return WKC_RETURN;
++		case '\t': return WKC_TAB;
++		case ' ': return WKC_SPACE;
++		case '`': return WKC_BACKQUOTE;
++		case Kpause: return WKC_PAUSE;
++		case '/': return WKC_SLASH;
++		case ';': return WKC_SEMICOLON;
++		case '=': return WKC_EQUALS;
++		case '[': return WKC_L_BRACKET;
++		case '\\': return WKC_BACKSLASH;
++		case ']': return WKC_R_BRACKET;
++		case '\'': return WKC_SINGLEQUOTE;
++		case ',': return WKC_COMMA;
++		case '.': return WKC_PERIOD;
++		case '-': return WKC_MINUS;
++	}
++	if (r >= 'a' && r <= 'z') return r - 'a' + 'A';
++	if (r >= 'A' && r <= 'Z') return r;
++	if (r >= '0' && r <= '9') return r;
++	return 0;
++}
++
++/** A typed character: a key press for the game. */
++static void TypeRune(char32_t r)
++{
++	/* Control combinations arrive as control characters. */
++	if (_p9_ctrl && r >= 1 && r < 0x20 && r != '\t' && r != '\n' && r != '\r' && r != Kbs && r != Kesc) r += 'a' - 1;
++
++	uint keycode = KeyCode(r);
++	if (_p9_shift) keycode |= WKC_SHIFT;
++	if (_p9_ctrl) keycode |= WKC_CTRL;
++	if (_p9_alt) keycode |= WKC_ALT;
++
++	/* Only printable characters go to edit boxes. */
++	char32_t c = (r >= 0x20 && r != Kdel && (r < KF || r >= 0xF900)) ? r : 0;
++	HandleKeypress(keycode, c);
++}
++
++/** A key went down or up: the state InputLoop reports. */
++static void KeyState(char32_t r, bool down)
++{
++	switch (r) {
++		case Kshift: _p9_shift = down; break;
++		case Kctl: _p9_ctrl = down; break;
++		case Kalt: _p9_alt = down; break;
++		case '\t': _p9_tab = down; break;
++		case Kleft: AssignBit(_p9_dirkeys, 0, down); break;
++		case Kup: AssignBit(_p9_dirkeys, 1, down); break;
++		case Kright: AssignBit(_p9_dirkeys, 2, down); break;
++		case Kdown: AssignBit(_p9_dirkeys, 3, down); break;
++	}
++}
++
++bool VideoDriver_Plan9::PollEvent()
++{
++	static int prev_buttons;
++	P9Event e;
++
++	if (p9draw_event(&e) == 0) return false;
++
++	switch (e.type) {
++		case P9E_MOUSE: {
++			int diff = prev_buttons ^ e.buttons;
++			if (diff & 1) {
++				_left_button_down = (e.buttons & 1) != 0;
++				if (!_left_button_down) _left_button_clicked = false;
++			}
++			if (diff & 4) {
++				_right_button_down = (e.buttons & 4) != 0;
++				if (_right_button_down) _right_button_clicked = true;
++			}
++			if ((diff & 8) && (e.buttons & 8)) _cursor.wheel--;
++			if ((diff & 16) && (e.buttons & 16)) _cursor.wheel++;
++			prev_buttons = e.buttons;
++
++			if (_cursor.UpdateCursorPosition(e.x, e.y)) p9draw_warp(_cursor.pos.x, _cursor.pos.y);
++			HandleMouseEvents();
++			break;
++		}
++
++		case P9E_CHAR:
++			TypeRune(e.rune);
++			break;
++
++		case P9E_KEYDOWN:
++		case P9E_KEYUP:
++			KeyState(e.rune, e.type == P9E_KEYDOWN);
++			break;
++
++		case P9E_RESIZE:
++			this->CreateMainSurface(e.x, e.y);
++			break;
++
++		case P9E_EXIT:
++			HandleExitGameRequest();
++			break;
++	}
++	return true;
++}
++
++void VideoDriver_Plan9::InputLoop()
++{
++	bool old_ctrl_pressed = _ctrl_pressed;
++
++	_ctrl_pressed = _p9_ctrl;
++	_shift_pressed = _p9_shift;
++	this->fast_forward_key_pressed = _p9_tab && !_p9_alt;
++	_dirkeys = _p9_dirkeys;
++
++	if (old_ctrl_pressed != _ctrl_pressed) HandleCtrlChanged();
++}
++
++void VideoDriver_Plan9::MainLoop()
++{
++	for (;;) {
++		if (_exit_game) break;
++
++		this->Tick();
++		this->SleepTillNextTick();
++	}
++}
++
++/* The window's size is the user's: rio resizes it. */
++bool VideoDriver_Plan9::ChangeResolution(int, int)
++{
++	return false;
++}
++
++bool VideoDriver_Plan9::ToggleFullscreen(bool)
++{
++	return false;
++}
++
++bool VideoDriver_Plan9::AfterBlitterChange()
++{
++	return this->CreateMainSurface(_screen.width, _screen.height);
++}
++
++/* The game draws its own cursor: the shim hides Plan 9's. */
++bool VideoDriver_Plan9::ClaimMousePointer()
++{
++	return true;
++}
+--- src-ref/src/video/plan9_v.h	1970-01-01 01:00:00.000000000 +0100
++++ src-p9/src/video/plan9_v.h	1970-01-01 01:00:00.000000000 +0100
+@@ -0,0 +1,53 @@
++/*
++ * This file is part of OpenTTD.
++ * OpenTTD is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 2.
++ * OpenTTD is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
++ * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <http://www.gnu.org/licenses/>.
++ */
++
++/** @file plan9_v.h Base of the Plan 9 video driver. */
++
++#ifndef VIDEO_PLAN9_H
++#define VIDEO_PLAN9_H
++
++#include "video_driver.hpp"
++
++/** The video driver for Plan 9's draw device (libdraw), through a small C shim. */
++class VideoDriver_Plan9 : public VideoDriver {
++public:
++	std::optional<std::string_view> Start(const StringList &param) override;
++
++	void Stop() override;
++
++	void MakeDirty(int left, int top, int width, int height) override;
++
++	void MainLoop() override;
++
++	bool ChangeResolution(int w, int h) override;
++
++	bool ToggleFullscreen(bool fullscreen) override;
++
++	bool AfterBlitterChange() override;
++
++	bool ClaimMousePointer() override;
++
++	std::string_view GetName() const override { return "plan9"; }
++
++protected:
++	void InputLoop() override;
++	void Paint() override;
++	void CheckPaletteAnim() override;
++	bool PollEvent() override;
++
++private:
++	bool CreateMainSurface(int w, int h);
++};
++
++/** Factory for the Plan 9 video driver. */
++class FVideoDriver_Plan9 : public DriverFactoryBase {
++public:
++	FVideoDriver_Plan9() : DriverFactoryBase(Driver::DT_VIDEO, 9, "plan9", "Plan 9 Video Driver") {}
++	std::unique_ptr<Driver> CreateInstance() const override { return std::make_unique<VideoDriver_Plan9>(); }
++};
++
++#endif /* VIDEO_PLAN9_H */
+--- src-ref/src/video/CMakeLists.txt	2026-04-04 16:16:04.000000000 +0100
++++ src-p9/src/video/CMakeLists.txt	2026-11-26 22:23:13.733289008 +0000
+@@ -32,6 +32,12 @@
+         win32_v.h
+         CONDITION WIN32
+     )
++
++    add_files(
++        plan9_v.cpp
++        plan9_v.h
++        CONDITION OPTION_PLAN9_VIDEO
++    )
+ endif()
+ 
+ add_files(
+--- src-ref/CMakeLists.txt	2026-04-04 16:16:04.000000000 +0100
++++ src-p9/CMakeLists.txt	2026-11-26 22:23:57.536422098 +0000
+@@ -182,7 +182,7 @@
+ show_options()
+ 
+ if(UNIX AND NOT APPLE AND NOT OPTION_DEDICATED)
+-    if(NOT SDL2_FOUND AND NOT ALLEGRO_FOUND)
++    if(NOT SDL2_FOUND AND NOT ALLEGRO_FOUND AND NOT OPTION_PLAN9_VIDEO)
+         message(FATAL_ERROR "SDL2 or Allegro is required for this platform")
+     endif()
+     if(HARFBUZZ_FOUND AND NOT ICU_i18n_FOUND)

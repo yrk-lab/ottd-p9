@@ -17,6 +17,10 @@
 #	A call that passes a struct by value (a byval pointer argument, which
 #	llvm-cbe passes as a struct value) gets its own wrapper too, declared
 #	with the same byval parameters, that passes the struct on by value.
+#	Each struct and wrapper starts with a /*@ name */ line, so the
+#	files of separately translated units can be merged (../tu/
+#	mergeinvoke.py); struct names are a hash of the layout, the same in
+#	every unit.
 #	Names are mangled as llvm-cbe does (CBEMangle), and struct types
 #	(literal { ptr, i8 } or named %T) get a C struct with the LLVM layout:
 #	explicit padding, packed, as cbe -cbe-explicit-padding lays out its own.
@@ -93,7 +97,7 @@ def struct(t, packed=False, key=None):
 	if key in structs:
 		return structs[key]
 	fields = [field(f) for f in split(t.strip()[1:-1])]
-	name = "struct eh_s%d" % len(structs)
+	name = "struct eh_s%s" % hashlib.md5(key.encode()).hexdigest()[:12]	# the same in every unit
 	body, off, align = [], 0, 1
 	for i, (c, n, a, sub) in enumerate(fields):
 		if packed:
@@ -108,7 +112,7 @@ def struct(t, packed=False, key=None):
 	if -off % align:
 		body.append("\tunsigned char\tpadtail[%d];\n" % (-off % align))
 		off += -off % align
-	decls.append("%s\n{\n%s};\n" % (name, "".join(body)))
+	decls.append("/*@ %s */\n%s\n{\n%s};\n" % (name, name, "".join(body)))
 	structs[key] = (name, off, align)
 	return structs[key]
 
@@ -143,7 +147,7 @@ def invoke(name, ret, params, nfixed=None):
 		fntype = "%s (*)(%s)" % (r, ", ".join(args) or "void")
 	else:
 		fntype = "%s (*)(%s)" % (r, ", ".join(args[:nfixed] + ["..."]))
-	out = ["%s\n%s(%s)\n{\n\tEhframe f;\n" % (r, name, formal)]
+	out = ["/*@ %s */\n%s\n%s(%s)\n{\n\tEhframe f;\n" % (name, r, name, formal)]
 	if r != "void":
 		out.append("\t%s r;\n\tstatic %s zero;\n" % (r, r))
 	out.append("\n\tf.prev = eh_top;\n\teh_top = &f;\n\tif(setjmp(f.jb) == 0){\n")
@@ -168,7 +172,7 @@ def findcatch(name, n):
 		body = "\tvoid *t[%d];\n\n" % k
 		body += "".join("\tt[%d] = t%d;\n" % (i, i) for i in range(k))
 		body += "\treturn eh_match(t, %d);\n" % k
-	return "void*\n%s(%s)\n{\n%s}\n\n" % (name, formal, body)
+	return "/*@ %s */\nvoid*\n%s(%s)\n{\n%s}\n\n" % (name, name, formal, body)
 
 # the type of one call argument: "ptr noundef nonnull %3" -> "ptr"
 def argtype(a):

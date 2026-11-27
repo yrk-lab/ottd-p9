@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""lower [--libc] < cbe.c > plan9.c
+"""lower [--libc] [--unit=name,ctors] < cbe.c > plan9.c
 
 Probe-grade stand-in for a cbe 'Plan 9 dialect' mode: llvm-cbe's C on stdin,
 C that kencc 6c accepts on stdout.  Everything here is mechanical; the
@@ -8,6 +8,10 @@ long-term home for these rules is a dialect switch inside llvm-cbe.
 import re, sys
 s = sys.stdin.read()
 LIBC = "--libc" in sys.argv[1:]	# translated ISO C program: route libc references through libc_p9.c
+# --unit=name,ctors: one of separately translated units (../tu); its
+# constructors are exported as __p9_ctors_<name>[_<priority>], listed in
+# the file ctors, for ../tu/mkctors.py's table
+UNIT = [a[7:].split(",", 1) for a in sys.argv[1:] if a.startswith("--unit=")]
 # ISO C names whose Plan 9 counterparts are missing or have a different ABI
 # (long = 32 bit on Plan 9 amd64)
 RENAMED = """printf fprintf vprintf vfprintf snprintf vsnprintf putc fputc putchar fputs puts fwrite fflush fopen fclose
@@ -18,6 +22,9 @@ fread fseek fseeko ftell ftello feof ferror clearerr fileno flockfile funlockfil
 getwc ungetwc fputwc vasprintf tan
 socket bind listen accept connect send sendto recv recvfrom setsockopt getsockopt getsockname getpeername
 getaddrinfo freeaddrinfo getnameinfo gai_strerror getifaddrs freeifaddrs select ioctl""".split()
+# Names Plan 9 libraries define that a program may define too: renamed
+# p_<name> (libdraw's globals)
+PROGRAM = "display font screen _screen".split()
 
 # 1. Preamble: 6c has no #if.  Drop every #if..#endif block and all
 #    #includes; keep the helper function definitions.
@@ -54,6 +61,9 @@ def strip_call(s, name):
 	return "".join(out)
 for n in ("__ATTRIBUTELIST__", "__attribute__", "__POSTFIXALIGN__", "__PREFIXALIGN__", "__FUNCTIONALIGN__"):
 	s = strip_call(s, n)
+#    Visibility (a unit's hidden symbols, which a whole-program link
+#    internalized): Plan 9 has none
+s = re.sub(r"\b__HIDDEN__\b", "", s)
 s = re.sub(r"__ATTRIBUTE_WEAK__|\b__forceinline\b|\b__noreturn\b", "", s)
 s = re.sub(r"\bstatic\s+inline\b", "static", s)
 
@@ -77,7 +87,20 @@ ctors = re.findall(r"\b(\w+)\(void\)[^;\n]*__ATTRIBUTE_CTOR__\s*;", s)
 prio = sorted((c for c in ctors if re.match(r"_GLOBAL__I_\d+$", c)), key=lambda c: int(c[11:]))
 ctors = prio + [c for c in ctors if c not in prio]
 s = re.sub(r"__ATTRIBUTE_(CTOR|DTOR)__", "", s)
-s += "\nvoid __p9_ctors(void) {\n" + "".join("  %s();\n" % c for c in dict.fromkeys(ctors)) + "}\n"
+if not UNIT:
+	s += "\nvoid __p9_ctors(void) {\n" + "".join("  %s();\n" % c for c in dict.fromkeys(ctors)) + "}\n"
+else:
+	#    By priority: 65535 for the ordinary ones.
+	byprio = {}
+	for c in dict.fromkeys(ctors):
+		m = re.match(r"_GLOBAL__I_(\d+)$", c)
+		byprio.setdefault(int(m.group(1)) if m else 65535, []).append(c)
+	listed = []
+	for p in sorted(byprio):
+		f = "__p9_ctors_%s%s" % (UNIT[0][0], "" if p == 65535 else "_%d" % p)
+		s += "\nvoid %s(void) {\n" % f + "".join("  %s();\n" % c for c in byprio[p]) + "}\n"
+		listed.append("%d %s\n" % (p, f))
+	open(UNIT[0][1], "w").write("".join(listed))
 
 # 6. --libc: route the RENAMED names to libc_p9.c's c_ versions
 if LIBC:
@@ -85,6 +108,11 @@ if LIBC:
 	ident = re.compile(r"\b(" + "|".join(RENAMED) + r")\b")
 	parts = re.split(r'("(?:\\.|[^"\\])*")', s)
 	s = "".join(p if i % 2 else ident.sub(r"c_\1", p) for i, p in enumerate(parts))
+	# the program's globals that libdraw has too (C++ does not mangle a
+	# namespace-scope variable's name: OpenTTD's _screen)
+	ident = re.compile(r"\b(" + "|".join(PROGRAM) + r")\b")
+	parts = re.split(r'("(?:\\.|[^"\\])*")', s)
+	s = "".join(p if i % 2 else ident.sub(r"p_\1", p) for i, p in enumerate(parts))
 	# glibc's setjmp is _setjmp: it must be Plan 9's setjmp itself, not a wrapper
 	s = re.sub(r"\b_setjmp\b", "setjmp", s)
 sys.stdout.write(

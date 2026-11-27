@@ -429,3 +429,27 @@ Next steps now (replace section 10's first two items):
   call recv by asm name, bypassing #define renames: -U_FORTIFY_SOURCE. Null-driver clients spin (ticks= runs
   out at once): use a huge ticks + timeout.
   Fast loops: phase0/plan9/run_net.sh (p9p, seconds); only=net phase2/run9front.sh (9front, <2 min).
+- PHASE 2.5 DONE (2026-11-27): per-unit translation, phase0/tu + phase2/buildtu.sh -> phase2/work/tu (538 units,
+  flat names). Gates: goken (u200/tu == tr), 9front IN PLACE (run9front.sh: tr == 9front, n1_sock PASS,
+  dedicated server + stock client), linux (`sys="goken linux" buildtu.sh`; gate.sh run .../obj.linux/openttd
+  linux == tr). Costs: no-op = nothing; 1 unit = that unit + link; goken link ~1.5 min; 9front full compile
+  10 min, link 6 min. Lessons:
+  * u9fs CHROOTS to the served tree and getpwnam()s there: serving the repo needs etc/passwd in it. run9front
+    bind-mounts the repo into work/9fsroot/ottd (unshare -rm + work/u9repo), guest: srv -nc ... /n/ottdfs;
+    bind /n/ottdfs/ottd /n/ottd. Error was "mount failed: unknown user".
+  * rc: `mk SYS=9front` is a syntax error (= in an argument): quote 'SYS=9front'.
+  * libdraw defines display/font/screen/_screen; OpenTTD's global `_screen` is unmangled: lower.py PROGRAM
+    list renames those to p_<name> (all units).
+  * 9front libc lacks openat; goken libc HAS it (raw syscall; defining it in os_p9 would clash) -> os9f.c,
+    9front RUNTIME only. Same pattern as net9f/netp9p.
+  * Linux system: unrename.h (c_X -> X from lower.py RENAMED, not main; glibc math.h included with the
+    pointer-taking decls renamed glibc_*, since cbe declares modff(float, void*)); main_unix.c (ctors then
+    c_main); -fpack-struct because 6c's `#pragma pack on` is ignored by gcc (ASan found the libc++ tree node
+    overflow: unpacked base 25 -> 32 bytes). -lmux for libdraw. rt.c gained the exception_ptr stubs.
+  * plan9port mk treats MISSING intermediates as up to date when the target is newer: deleting objects to
+    force a rebuild needs the target deleted too. mk doesn't track flags: after a CFLAGS change, delete
+    obj.$SYS objects AND obj.$SYS/openttd.
+  * mkfile ends with <rules.$SYS (system-specific rules after the default target); generic $P0/%.c metarule.
+  * Dedicated check now also fails on "is dropped"/"made an error" (a CPU-starved run dropped the client
+    for slow map download but grep still passed).
+  Old whole-program goken dir phase2/work/p9 (546 MB) is unused now; build9.sh kept for comparison only.

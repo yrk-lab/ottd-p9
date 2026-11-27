@@ -1,10 +1,15 @@
 #!/bin/bash
 # build_ref
 #	The reference: stock OpenTTD (src-ref) as upstream builds it on
-#	Linux (system compiler, libstdc++, exceptions, threads), dedicated
-#	server only.  Libraries the Plan 9 build will not have are left
-#	out (they do not affect the simulation): only zlib.  No liblzma for
-#	now, as in the translated build (see ../phase2/README.md).
+#	Linux (system compiler, libstdc++, exceptions, threads), the game
+#	with its GUI (no video, sound or music library: the GUI draws to
+#	the null driver, which plays the gate; -D runs a dedicated
+#	server).  Libraries the Plan 9 build will not have are left out
+#	(they do not affect the simulation): only zlib, no fonts library
+#	(the built-in sprite font).  No liblzma for now, as in the
+#	translated build (see ../phase2/README.md).
+#	ALLEGRO_FOUND only satisfies upstream's "SDL2 or Allegro" check: the
+#	Allegro driver's files test Allegro_FOUND, which stays unset.
 set -euo pipefail
 . "$(dirname "$0")/common.sh"
 
@@ -12,7 +17,17 @@ b=$work/build-ref
 [ -d "$ref" ] || fatal "no $ref: run setup.sh"
 cmake -S "$ref" -B "$b" -G Ninja -Wno-dev \
 	-DCMAKE_BUILD_TYPE=Release \
-	-DOPTION_DEDICATED=ON \
+	-DOPTION_DEDICATED=OFF \
+	-DALLEGRO_FOUND=ON \
+	-DCMAKE_DISABLE_FIND_PACKAGE_Freetype=ON \
+	-DCMAKE_DISABLE_FIND_PACKAGE_Fontconfig=ON \
+	-DCMAKE_DISABLE_FIND_PACKAGE_Harfbuzz=ON \
+	-DCMAKE_DISABLE_FIND_PACKAGE_ICU=ON \
+	-DCMAKE_DISABLE_FIND_PACKAGE_SDL2=ON \
+	-DCMAKE_DISABLE_FIND_PACKAGE_Allegro=ON \
+	-DCMAKE_DISABLE_FIND_PACKAGE_OpenGL=ON \
+	-DCMAKE_DISABLE_FIND_PACKAGE_Fluidsynth=ON \
+	-DCMAKE_DISABLE_FIND_PACKAGE_OpusFile=ON \
 	-DCMAKE_DISABLE_FIND_PACKAGE_LZO=ON \
 	-DCMAKE_DISABLE_FIND_PACKAGE_LibLZMA=ON \
 	-DCMAKE_DISABLE_FIND_PACKAGE_PNG=ON \

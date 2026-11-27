@@ -69,6 +69,22 @@ comes with libc++abi's typeinfo code, which the exception runtime needs anyway.
    reads modern saves. zlib goes through the whole pipeline although it is C already: compiled natively by 6c it
    would have a 32-bit uLong (a different z_stream than the LP64 program uses) and its gz* calls would bypass the
    POSIX shims. Comparison and reasons: `phase2/README.md`.
+2.5. **Per-unit translation (added 2026-11-26, before Phase 3).** Keep the source's structure: one OpenTTD `.cpp`
+   becomes one `.c` and one object, and a generated mkfile rebuilds only what changed (p9p `mk` on Linux, `mk` on
+   9front). Why: the whole-program link made every change rewrite 2-3 GB (the linked module, ~150 MB, several times;
+   three 140 MB C files; a split copy; a copy into the 9front root), which wears the SSD and is slow. How:
+   - the cross-unit work a linker does is done before translating: each C++ inline/template symbol (linkonce_odr,
+     weak: functions, vtables, typeinfo, static locals, template statics) gets one home unit, chosen
+     deterministically; elsewhere it becomes a declaration (available_externally, then LLVM's elim-avail-extern).
+     6l has no weak symbols, so this is required, and it keeps C++ semantics (one static local, one address);
+   - the remaining whole-program pieces are small generated files, written only when their content changes: the
+     exception wrappers (one `invoke.c`, the union of each unit's), the constructor table (`ctors.c`), and the
+     libc++ modules the program needs, translated like units;
+   - 9front builds in place from the host's tree over a second u9fs mount: no copies, objects persist across boots.
+   Gate: the Phase 1 gate (Linux, short run while iterating, full run at the end) and the Phase 2 gate on 9front,
+   with a one-unit change rebuilding one unit.
+   **Done 2026-11-27:** 538 units; goken, 9front (in place) and Linux/glibc (`mk SYS=linux`, for the Phase 3
+   loop with plan9port's libdraw) builds all pass the gate; the dedicated server takes the stock client on 9front.
 3. **Video driver.** `src/video/plan9_v.cpp` (translated C++) + small hand-written C shim on libdraw (initdraw, loadimage,
    mouse/keyboard, eresized). Start as split processes (game under APE, native frontend over a pipe), merge later if wanted.
    Built-in sprite font, null sound, 32bpp-optimized blitter, OpenGFX base set.

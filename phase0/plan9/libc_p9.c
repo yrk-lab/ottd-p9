@@ -2186,6 +2186,267 @@ __ctype_b_loc(void)
 	return &ctypep;
 }
 
+/*
+ * The rest of the "C" locale, for libc++'s *_byname facets and
+ * conversions, which OpenTTD links but does not use: a character is a
+ * byte, collation is byte order.
+ */
+
+static int
+isbits(int c, int bits)
+{
+	if(c < 0 || c > 255)
+		return 0;
+	return ((*__ctype_b_loc())[c] & bits) != 0;
+}
+
+int
+iswalpha_l(int c, void*)
+{
+	return isbits(c, Isalpha);
+}
+
+int
+iswblank_l(int c, void*)
+{
+	return isbits(c, Isblank);
+}
+
+int
+iswcntrl_l(int c, void*)
+{
+	return isbits(c, Iscntrl);
+}
+
+int
+iswdigit_l(int c, void*)
+{
+	return isbits(c, Isdigit);
+}
+
+int
+iswlower_l(int c, void*)
+{
+	return isbits(c, Islower);
+}
+
+int
+iswprint_l(int c, void*)
+{
+	return isbits(c, Isprint);
+}
+
+int
+iswpunct_l(int c, void*)
+{
+	return isbits(c, Ispunct);
+}
+
+int
+iswspace_l(int c, void*)
+{
+	return isbits(c, Isspace);
+}
+
+int
+iswupper_l(int c, void*)
+{
+	return isbits(c, Isupper);
+}
+
+int
+iswxdigit_l(int c, void*)
+{
+	return isbits(c, Isxdigit);
+}
+
+
+int
+toupper_l(int c, void*)
+{
+	return c >= 'a' && c <= 'z' ? c - 'a' + 'A' : c;
+}
+
+int
+tolower_l(int c, void*)
+{
+	return c >= 'A' && c <= 'Z' ? c - 'A' + 'a' : c;
+}
+
+int
+towupper_l(int c, void *l)
+{
+	return toupper_l(c, l);
+}
+
+int
+towlower_l(int c, void *l)
+{
+	return tolower_l(c, l);
+}
+
+int
+strcoll_l(char *a, char *b, void*)
+{
+	return strcmp(a, b);
+}
+
+uvlong
+strxfrm_l(char *d, char *s, uvlong n, void*)
+{
+	uvlong len;
+
+	len = strlen(s);
+	if(len < n)
+		memmove(d, s, len + 1);
+	return len;
+}
+
+int
+wmemcmp(int *a, int *b, uvlong n)
+{
+	for(; n > 0; n--, a++, b++)
+		if(*a != *b)
+			return *a < *b ? -1 : 1;
+	return 0;
+}
+
+int
+wcscoll_l(int *a, int *b, void*)
+{
+	for(; *a == *b; a++, b++)
+		if(*a == 0)
+			return 0;
+	return *a < *b ? -1 : 1;
+}
+
+uvlong
+wcsxfrm_l(int *d, int *s, uvlong n, void*)
+{
+	uvlong len;
+
+	for(len = 0; s[len] != 0; len++)
+		;
+	if(len < n)
+		memmove(d, s, (len + 1) * sizeof(int));
+	return len;
+}
+
+/* EOF (-1) is WEOF; a byte is its own character */
+uint
+btowc(int c)
+{
+	return c == -1 ? 0xFFFFFFFF : (uchar)c;
+}
+
+int
+wctob(uint c)
+{
+	return c < 256 ? c : -1;
+}
+
+char*
+setlocale(int, char *name)
+{
+	if(name == nil || *name == 0 || strcmp(name, "C") == 0 || strcmp(name, "POSIX") == 0)
+		return "C";
+	return nil;
+}
+
+int
+swprintf(int*, uvlong, int*, ...)
+{
+	return -1;
+}
+
+/* the wide string as bytes, up to the first character above 127 */
+static char*
+narrow(int *s, char *buf, int n)
+{
+	int i;
+
+	for(i = 0; i < n - 1 && s[i] > 0 && s[i] < 128; i++)
+		buf[i] = s[i];
+	buf[i] = 0;
+	return buf;
+}
+
+static void
+wideend(int *s, char *buf, char *e, int **ep)
+{
+	if(ep != nil)
+		*ep = s + (e - buf);
+}
+
+vlong
+__isoc23_wcstoll(int *s, int **ep, int base)
+{
+	char buf[128], *e;
+	vlong v;
+
+	v = cstrtoll(narrow(s, buf, sizeof buf), &e, base);
+	wideend(s, buf, e, ep);
+	return v;
+}
+
+vlong
+__isoc23_wcstol(int *s, int **ep, int base)
+{
+	return __isoc23_wcstoll(s, ep, base);
+}
+
+uvlong
+__isoc23_wcstoull(int *s, int **ep, int base)
+{
+	char buf[128], *e;
+	uvlong v;
+
+	v = cstrtoull(narrow(s, buf, sizeof buf), &e, base);
+	wideend(s, buf, e, ep);
+	return v;
+}
+
+uvlong
+__isoc23_wcstoul(int *s, int **ep, int base)
+{
+	return __isoc23_wcstoull(s, ep, base);
+}
+
+double
+wcstod(int *s, int **ep)
+{
+	char buf[128], *e;
+	double v;
+
+	v = strtod(narrow(s, buf, sizeof buf), &e);
+	wideend(s, buf, e, ep);
+	return v;
+}
+
+float
+wcstof(int *s, int **ep)
+{
+	return wcstod(s, ep);
+}
+
+double
+wcstold(int *s, int **ep)
+{
+	return wcstod(s, ep);
+}
+
+float
+strtof(char *s, char **e)
+{
+	return strtod(s, e);
+}
+
+double
+strtold(char *s, char **e)
+{
+	return strtod(s, e);
+}
+
 /* glibc struct tm, x86-64 */
 typedef struct Ctm Ctm;
 struct Ctm

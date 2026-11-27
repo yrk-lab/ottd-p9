@@ -1,5 +1,5 @@
 diff --git a/lib/Target/CBackend/CBackend.cpp b/lib/Target/CBackend/CBackend.cpp
-index 8d57096..dcaa009 100644
+index 8d57096..c11f95c 100644
 --- a/lib/Target/CBackend/CBackend.cpp
 +++ b/lib/Target/CBackend/CBackend.cpp
 @@ -52,6 +52,14 @@ namespace llvm_cbe {
@@ -160,7 +160,21 @@ index 8d57096..dcaa009 100644
          if (printed)
            Out << ", ";
          printConstant(C, Context);
-@@ -2594,6 +2676,11 @@ void CWriter::generateHeader(Module &M) {
+@@ -2547,6 +2629,13 @@ void CWriter::generateHeader(Module &M) {
+         Out << "__thread ";
+ 
+       Type *ElTy = I->getValueType();
++      // An array of unknown size declared here ("extern T x[];", an
++      // [0 x T] in the IR) is defined in another unit: declare it as its
++      // first element, which is how its uses here index it.
++      if (auto *AT = dyn_cast<ArrayType>(ElTy))
++        if (I->isDeclaration() && AT->getNumElements() == 0 &&
++            !isEmptyType(AT->getElementType()))
++          ElTy = AT->getElementType();
+       unsigned Alignment = I->getAlignment();
+       bool IsOveraligned =
+           Alignment && Alignment > TD->getABITypeAlign(ElTy).value();
+@@ -2594,6 +2683,11 @@ void CWriter::generateHeader(Module &M) {
        case Intrinsic::ssub_sat:
        case Intrinsic::sshl_sat:
        case Intrinsic::ushl_sat:
@@ -172,7 +186,7 @@ index 8d57096..dcaa009 100644
        case Intrinsic::bswap:
        case Intrinsic::ceil:
        case Intrinsic::ctlz:
-@@ -2630,7 +2717,11 @@ void CWriter::generateHeader(Module &M) {
+@@ -2630,7 +2724,11 @@ void CWriter::generateHeader(Module &M) {
            I->getName() == "trunc" || I->getName() == "truncf" ||
            I->getName() == "rint" || I->getName() == "rintf" ||
            I->getName() == "floor" || I->getName() == "floorf" ||
@@ -185,7 +199,7 @@ index 8d57096..dcaa009 100644
          I->getName() == "alloca" || I->getName() == "_alloca" ||
          I->getName() == "_chkstk" || I->getName() == "__chkstk" ||
          I->getName() == "___chkstk_ms")
-@@ -2714,8 +2805,11 @@ void CWriter::generateHeader(Module &M) {
+@@ -2714,8 +2812,11 @@ void CWriter::generateHeader(Module &M) {
  
        Type *ElTy = I->getValueType();
        unsigned Alignment = I->getAliaseeObject()->getAlignment();
@@ -198,7 +212,31 @@ index 8d57096..dcaa009 100644
        if (IsOveraligned) {
          headerUseAligns();
          Out << "__PREFIXALIGN__(" << Alignment << ") ";
-@@ -3628,6 +3722,8 @@ void CWriter::printModuleTypes(raw_ostream &Out) {
+@@ -3602,6 +3703,23 @@ void CWriter::printModuleTypes(raw_ostream &Out) {
+   // printed in the correct order.
+   Out << "\n/* Types Declarations */\n";
+ 
++  // The structs the intrinsics we define return ({ iN, i1 } for the
++  // *_with_overflow helpers) need a definition too: in a module of its
++  // own, nothing else may use them.
++  for (const Function &F : *TheModule)
++    if (F.isIntrinsic())
++      for (auto I = F.getValueType()->subtype_begin();
++           I != F.getValueType()->subtype_end(); ++I)
++        if (isa<StructType>(*I))
++          TypedefDeclTypes.insert(*I);
++  // So do the element types of the arrays of unknown size declared here
++  // as their first element (see the global variable declarations).
++  for (const GlobalVariable &G : TheModule->globals())
++    if (auto *AT = dyn_cast<ArrayType>(G.getValueType()))
++      if (G.isDeclaration() && AT->getNumElements() == 0 &&
++          !isEmptyType(AT->getElementType()))
++        TypedefDeclTypes.insert(AT->getElementType());
++
+   // Collect types referenced by structs and global functions, and
+   // forward-declare the structs.
+   {
+@@ -3628,6 +3746,8 @@ void CWriter::printModuleTypes(raw_ostream &Out) {
    // Emit them now, before the function that uses them is emitted
    for (auto &F : prototypesToGen) {
      Out << '\n';
@@ -207,7 +245,7 @@ index 8d57096..dcaa009 100644
      printFunctionProto(Out, F, GetValueName(F));
      Out << ";\n";
    }
-@@ -4237,6 +4333,20 @@ void CWriter::visitBinaryOperator(BinaryOperator &I) {
+@@ -4237,6 +4357,20 @@ void CWriter::visitBinaryOperator(BinaryOperator &I) {
      // Certain instructions require the operand to be forced to a specific type
      // so we use writeOperandWithCast here instead of writeOperand. Similarly
      // below for operand 1
@@ -228,7 +266,7 @@ index 8d57096..dcaa009 100644
      writeOperandWithCast(I.getOperand(0), I.getOpcode());
  
      switch (I.getOpcode()) {
-@@ -4456,6 +4566,13 @@ void CWriter::visitCastInst(CastInst &I) {
+@@ -4456,6 +4590,13 @@ void CWriter::visitCastInst(CastInst &I) {
    Out << ')';
  }
  
@@ -242,7 +280,7 @@ index 8d57096..dcaa009 100644
  void CWriter::visitSelectInst(SelectInst &I) {
    CurInstr = &I;
  
-@@ -4498,7 +4615,7 @@ static void printLimitValue(IntegerType &Ty, bool isSigned, bool isMax,
+@@ -4498,7 +4639,7 @@ static void printLimitValue(IntegerType &Ty, bool isSigned, bool isMax,
    if (isSigned)
      Out << sprefix << type << (isMax ? "_MAX" : "_MIN");
    else
@@ -251,7 +289,7 @@ index 8d57096..dcaa009 100644
  }
  
  #ifndef NDEBUG
-@@ -4532,6 +4649,7 @@ void CWriter::printIntrinsicDefinition(FunctionType *funT, unsigned Opcode,
+@@ -4532,6 +4673,7 @@ void CWriter::printIntrinsicDefinition(FunctionType *funT, unsigned Opcode,
    case Intrinsic::sshl_sat:
    case Intrinsic::smin:
    case Intrinsic::smax:
@@ -259,7 +297,7 @@ index 8d57096..dcaa009 100644
      isSigned = true;
      break;
    }
-@@ -4569,6 +4687,8 @@ void CWriter::printIntrinsicDefinition(FunctionType *funT, unsigned Opcode,
+@@ -4569,6 +4711,8 @@ void CWriter::printIntrinsicDefinition(FunctionType *funT, unsigned Opcode,
      case Intrinsic::ctlz:
      case Intrinsic::cttz:
      case Intrinsic::powi:
@@ -268,7 +306,7 @@ index 8d57096..dcaa009 100644
        break;
      }
      printTypeName(Out, funT->getParamType(i), isSigned);
-@@ -4593,6 +4713,38 @@ void CWriter::printIntrinsicDefinition(FunctionType *funT, unsigned Opcode,
+@@ -4593,6 +4737,38 @@ void CWriter::printIntrinsicDefinition(FunctionType *funT, unsigned Opcode,
        }
        Out << ");\n";
      }
@@ -307,7 +345,7 @@ index 8d57096..dcaa009 100644
    } else if (elemIntT) {
      // handle integer ops
      cwriter_assert(isSupportedIntegerSize(*elemIntT) &&
-@@ -4641,12 +4793,28 @@ void CWriter::printIntrinsicDefinition(FunctionType *funT, unsigned Opcode,
+@@ -4641,12 +4817,28 @@ void CWriter::printIntrinsicDefinition(FunctionType *funT, unsigned Opcode,
  
      case Intrinsic::umul_with_overflow:
        cwriter_assert(cast<StructType>(retT)->getElementType(0) == elemT);
@@ -338,7 +376,7 @@ index 8d57096..dcaa009 100644
        break;
      
      case Intrinsic::uadd_sat:
-@@ -4730,6 +4898,18 @@ void CWriter::printIntrinsicDefinition(FunctionType *funT, unsigned Opcode,
+@@ -4730,6 +4922,18 @@ void CWriter::printIntrinsicDefinition(FunctionType *funT, unsigned Opcode,
        Out << " : r;\n";
        break;
  
@@ -357,7 +395,7 @@ index 8d57096..dcaa009 100644
      case Intrinsic::bswap:
        cwriter_assert(retT == elemT);
        cwriter_assert(!isa<VectorType>(retT));
-@@ -4792,7 +4972,8 @@ void CWriter::printIntrinsicDefinition(FunctionType *funT, unsigned Opcode,
+@@ -4792,7 +4996,8 @@ void CWriter::printIntrinsicDefinition(FunctionType *funT, unsigned Opcode,
        Out << "  r = a < b ? a : b;\n";
        break;
      case Intrinsic::abs:
@@ -367,7 +405,7 @@ index 8d57096..dcaa009 100644
        break;
      case Intrinsic::is_constant:
        Out << "  r = 0 /* llvm.is.constant */;\n";
-@@ -4903,6 +5084,11 @@ bool CWriter::lowerIntrinsics(Function &F) {
+@@ -4903,6 +5108,11 @@ bool CWriter::lowerIntrinsics(Function &F) {
            case Intrinsic::ssub_sat:
            case Intrinsic::ushl_sat:
            case Intrinsic::sshl_sat:
@@ -379,7 +417,7 @@ index 8d57096..dcaa009 100644
            case Intrinsic::bswap:
            case Intrinsic::ceil:
            case Intrinsic::ctlz:
-@@ -5048,10 +5234,12 @@ void CWriter::visitCallInst(CallInst &I) {
+@@ -5048,10 +5258,12 @@ void CWriter::visitCallInst(CallInst &I) {
      // emit cast for the first argument to type expected by header prototype
      // the jmp_buf type is an array, so the array-to-pointer decay adds the
      // strange extra *'s
@@ -394,7 +432,7 @@ index 8d57096..dcaa009 100644
    }
  
    for (; AI != AE; ++AI, ++ArgNo) {
-@@ -5245,6 +5433,11 @@ bool CWriter::visitBuiltinCall(CallInst &I, Intrinsic::ID ID) {
+@@ -5245,6 +5457,11 @@ bool CWriter::visitBuiltinCall(CallInst &I, Intrinsic::ID ID) {
    case Intrinsic::usub_with_overflow:
    case Intrinsic::umul_with_overflow:
    case Intrinsic::smul_with_overflow:
@@ -406,7 +444,7 @@ index 8d57096..dcaa009 100644
    case Intrinsic::bswap:
    case Intrinsic::ctlz:
    case Intrinsic::ctpop:
-@@ -5507,8 +5700,15 @@ void CWriter::printGEPExpression(Value *Ptr, unsigned NumOperands,
+@@ -5507,8 +5724,15 @@ void CWriter::printGEPExpression(Value *Ptr, unsigned NumOperands,
        // Print P rather than (&P)[0]
        Out << '(';
        if (SourceType && SourceType.value() != ExposedType.value()) {
@@ -423,7 +461,7 @@ index 8d57096..dcaa009 100644
          Out << "*)";
        }
        Out << '&';
-@@ -5522,7 +5722,9 @@ void CWriter::printGEPExpression(Value *Ptr, unsigned NumOperands,
+@@ -5522,7 +5746,9 @@ void CWriter::printGEPExpression(Value *Ptr, unsigned NumOperands,
        writeOperand(Ptr);
        Out << ")->field" << cast<ConstantInt>(I.getOperand())->getZExtValue()
            << ')';

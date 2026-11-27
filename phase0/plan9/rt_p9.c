@@ -432,3 +432,59 @@ pthread_cond_clockwait(void*, void*, int, void*)
 {
 	return 0;
 }
+
+int
+pthread_cond_signal(void*)
+{
+	return 0;
+}
+
+/* no other thread could signal: the time runs out */
+int
+pthread_cond_timedwait(void*, void*, void*)
+{
+	return 110;	/* ETIMEDOUT */
+}
+
+int
+pthread_mutex_trylock(void*)
+{
+	return 0;
+}
+
+/*
+ * std::exception_ptr, for what libc++ links (std::future): with no
+ * threads there is never an exception to carry over, so the pointer
+ * is always null.  An exception_ptr is one pointer; it has a
+ * destructor, so it is returned and passed by address.
+ */
+
+void
+_ZNSt13exception_ptrC1ERKS_(void **p, void **q)
+{
+	*p = *q;
+}
+
+void
+_ZNSt13exception_ptrD1Ev(void**)
+{
+}
+
+void**
+_ZNSt13exception_ptraSERKS_(void **p, void **q)
+{
+	*p = *q;
+	return p;
+}
+
+void
+_ZSt17current_exceptionv(void **r)
+{
+	*r = nil;
+}
+
+void
+_ZSt17rethrow_exceptionSt13exception_ptr(void**)
+{
+	abort();
+}

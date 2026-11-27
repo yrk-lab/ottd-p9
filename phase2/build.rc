@@ -1,88 +1,75 @@
 #!/bin/rc
-# build.rc - build the translated OpenTTD on 9front and run it
-#	In /ottd, staged by run9front.sh: the Plan 9 runtime (rt_p9.c,
-#	libc_p9.c, os_p9.c, net_p9.c and net9f.c, eh_rt.c) and its headers
-#	(shim/, net.h); the socket tests, translated (nettest/); the
-#	units from split.py (openttd.h, data.c, fn*.c) and the exception
-#	wrappers (invoke.c); the data (lang/ etc., opengfx/,
-#	regression.sav).  Compiles every unit with this system's 6c, two
-#	at a time.  Then, for what is staged:
-#	- runs each socket test, output in nettest/name.out;
-#	- links openttd.out with 6l and runs openttd -h;
+# build.rc - build the translated OpenTTD on 9front, in place, and run it
+#	Run at boot by run9front.sh, with the repository mounted on
+#	/n/ottd.  Builds work/tu (../phase0/tu/build.sh's tree, translated
+#	on Linux) with mk SYS=9front: only what changed since the last
+#	boot is compiled, objects in work/tu/obj.9front.  Then, for what
+#	run9front.sh prepared in work/9f (the results go there too):
+#	- runs each socket test (work/nettest/name.c) against the
+#	  runtime's objects, output in 9f/name.out;
+#	- runs openttd -h;
 #	- plays the Phase 1 gate scenarios for $ticks ticks (default
-#	  100000), leaving the exit saves in gate/world.sav and
-#	  gate/regression.sav;
-#	- starts a dedicated server (port 3979), says so in ded/ready,
-#	  and stops it when the host's client is done (ded/done) or
-#	  after $dedtime seconds (default 600); its log is ded/log.
-rfork e
-cd /ottd
-fail=()
+#	  100000): 9f/gate/world.sav, 9f/gate/regression.sav;
+#	- with 9f/gui/openttd.cfg, runs the game with the Plan 9 video
+#	  driver on the screen for $guitime seconds (default 120), the
+#	  draw shim writing a screenshot to 9f/gui/shot.ppm;
+#	- with 9f/ded/openttd.cfg, starts a dedicated server (port 3979),
+#	  says so in 9f/ded/ready, and stops it when the host's client is
+#	  done (9f/ded/done) or after $dedtime seconds (default 600).
+rfork en
+r=/n/ottd
+tu=$r/phase2/work/tu
+o=$tu/obj.9front
+out=$r/phase2/work/9f
+data=$r/phase1/work
 date
 
-# cc file: compile, log in file.log
-fn cc {
-	if(! 6c -w -I/ottd/shim $1 >$1.log >[2=1]){
-		echo $1: 6c FAILED
-		grep -v '^warning' $1.log | sed 5q
-	}
+cd $tu
+if(! mk 'SYS=9front' >$out/mk.log >[2=1]){
+	echo mk FAILED
+	grep -v '^warning' $out/mk.log | tail -20 | cut -c1-300
+	exit mk
 }
-
-n=0
-for(f in *.c){
-	cc $f &
-	n=`{echo $n + 1 | hoc}
-	if(~ $n 2){
-		wait
-		n=0
-	}
-}
-wait
-for(f in *.c){
-	o=`{echo $f | sed 's/\.c$/.6/'}
-	if(! test -f $o)
-		fail=($fail $f)
-}
-if(! ~ $#fail 0){
-	echo failed: $fail
-	exit fail
-}
+echo mk: `{grep -c '^6[cl] ' $out/mk.log} commands
 date
 
 # the socket tests, against the runtime
-rt=(rt_p9.6 libc_p9.6 os_p9.6 net_p9.6 net9f.6)
-for(f in `{ls nettest/*.c >[2]/dev/null}){
-	t=`{echo $f | sed 's/\.c$//'}
-	if(6c -w -I/ottd/shim -o $t.6 $f >$t.log >[2=1] && 6l -o $t.x $t.6 $rt >>$t.log >[2=1]){
-		$t.x >$t.out >[2=1]
-		echo $t status $status
+rt=($o/rt_p9.6 $o/libc_p9.6 $o/os_p9.6 $o/net_p9.6 $o/net9f.6)
+for(f in `{ls $r/phase2/work/nettest/*.c >[2]/dev/null}){
+	n=`{basename $f .c}
+	if(6c -w -I$r/phase0/plan9/shim -o $out/$n.6 $f >$out/$n.log >[2=1] && 6l -o $out/$n.x $out/$n.6 $rt >>$out/$n.log >[2=1]){
+		$out/$n.x >$out/$n.out >[2=1]
+		echo $n status $status
 	}
 	if not{
-		echo $t: BUILD FAILED
-		sed 5q $t.log
+		echo $n: BUILD FAILED
+		sed 5q $out/$n.log
 	}
 }
-if(! test -f openttd.h)
-	exit ''
-if(! 6l -o openttd.out *.6 >6l.log >[2=1]){
-	echo 6l FAILED
-	sed 10q 6l.log
-	exit 6l
-}
-date
-ls -l openttd.out
-./openttd.out -h >h.txt >[2=1]
-echo openttd -h status $status
-sed 20q h.txt
 
-# play s: the Phase 1 gate scenario s (as phase1/gate.sh), in a fresh
-# personal directory gate/s; the exit save is gate/s.sav
+# the data OpenTTD finds next to its executable
+for(d in lang ai game baseset media bin){
+	mkdir -p $o/$d
+	bind $data/build-p9/$d $o/$d
+}
+$o/openttd -h >$out/h.txt >[2=1]
+echo openttd -h status $status
+sed 3q $out/h.txt
+
+# a fresh personal directory d with the gate's base set and config
+fn personal {
+	rm -rf $1
+	mkdir -p $1/data/openttd/baseset $1/config
+	bind $data/data/openttd/baseset $1/data/openttd/baseset
+}
+
+# play s: the Phase 1 gate scenario s (as phase1/gate.sh); the exit
+# save is gate/s.sav
 fn play {
 	s=$1
-	d=/ottd/gate/$s
-	rm -rf $d $d.sav
-	mkdir -p $d/data/openttd/baseset $d/config
-	bind /ottd/opengfx $d/data/openttd/baseset
+	d=$out/gate/$s
+	personal $d
+	rm -f $d.sav
 	{
 		echo '[misc]'
 		echo 'savegame_format = none'
@@ -98,9 +85,9 @@ fn play {
 	case world
 		game=(-G $seed -g)
 	case regression
-		game=(-g /ottd/regression.sav)
+		game=(-g $data/regression.sav)
 	}
-	XDG_DATA_HOME=$d/data XDG_CONFIG_HOME=$d/config ./openttd.out -x -c $d/openttd.cfg \
+	XDG_DATA_HOME=$d/data XDG_CONFIG_HOME=$d/config $o/openttd -x -c $d/openttd.cfg \
 		-v null:ticks^'='^$ticks -s null -m null $game >$d/log >[2=1]
 	st=$status
 	if(test -f $d/save/autosave/exit.sav){
@@ -113,25 +100,41 @@ fn play {
 	}
 }
 
-if(test -d /ottd/opengfx){
-	rfork n
-	if(~ $#ticks 0)
-		ticks=100000
-	seed=1234567
-	date
-	for(s in world regression)
-		play $s
-	date
+if(~ $#ticks 0)
+	ticks=100000
+seed=1234567
+mkdir -p $out/gate
+for(s in world regression)
+	play $s
+date
+
+# the video driver, on the screen
+if(test -f $out/gui/openttd.cfg){
+	d=$out/gui
+	if(~ $#guitime 0)
+		guitime=120
+	cp $d/openttd.cfg /tmp/gui.cfg
+	personal $d
+	mv /tmp/gui.cfg $d/openttd.cfg
+	XDG_DATA_HOME=$d/data XDG_CONFIG_HOME=$d/config p9drawshot=$d/shot.ppm p9drawshotat=200 \
+		$o/openttd -x -c $d/openttd.cfg -v plan9 -s null -m null -d driver^'='^3 >$d/log >[2=1] &
+	pid=$apid
+	sleep $guitime
+	echo kill >/proc/$pid/note
+	sleep 1
+	echo video driver log:
+	grep -v '^$' $d/log | tail -10
 }
 
 # a dedicated server for the host's client
-if(test -f /ottd/ded/openttd.cfg){
-	d=/ottd/ded
+if(test -f $out/ded/openttd.cfg){
+	d=$out/ded
 	if(~ $#dedtime 0)
 		dedtime=600
-	mkdir -p $d/data/openttd/baseset $d/config
-	bind /ottd/opengfx $d/data/openttd/baseset
-	XDG_DATA_HOME=$d/data XDG_CONFIG_HOME=$d/config ./openttd.out -D -x -c $d/openttd.cfg \
+	cp $d/openttd.cfg /tmp/ded.cfg
+	personal $d
+	mv /tmp/ded.cfg $d/openttd.cfg
+	XDG_DATA_HOME=$d/data XDG_CONFIG_HOME=$d/config $o/openttd -D -x -c $d/openttd.cfg \
 		-d net^'='^3 >$d/log >[2=1] &
 	pid=$apid
 	# rc has no break: count in the condition

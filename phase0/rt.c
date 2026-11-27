@@ -155,3 +155,41 @@ __cxa_thread_atexit(void (*f)(void *), void *a, void *d)
 	(void)d;
 	return 0;
 }
+
+/*
+ * std::exception_ptr, for what libc++ links (std::future), as
+ * plan9/rt_p9.c: with no threads there is never an exception to carry
+ * over, so the pointer is always null.
+ */
+
+void
+_ZNSt13exception_ptrC1ERKS_(void **p, void **q)
+{
+	*p = *q;
+}
+
+void
+_ZNSt13exception_ptrD1Ev(void **p)
+{
+	(void)p;
+}
+
+void**
+_ZNSt13exception_ptraSERKS_(void **p, void **q)
+{
+	*p = *q;
+	return p;
+}
+
+void
+_ZSt17current_exceptionv(void **r)
+{
+	*r = NULL;
+}
+
+void
+_ZSt17rethrow_exceptionSt13exception_ptr(void **p)
+{
+	(void)p;
+	abort();
+}
