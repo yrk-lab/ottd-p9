@@ -1,5 +1,5 @@
 diff --git a/lib/Target/CBackend/CBackend.cpp b/lib/Target/CBackend/CBackend.cpp
-index 8d57096..c11f95c 100644
+index 8d57096..e8435e2 100644
 --- a/lib/Target/CBackend/CBackend.cpp
 +++ b/lib/Target/CBackend/CBackend.cpp
 @@ -52,6 +52,14 @@ namespace llvm_cbe {
@@ -17,7 +17,22 @@ index 8d57096..c11f95c 100644
  static cl::opt<bool> DeclareLocalsLate(
      "cbe-declare-locals-late",
      cl::desc("C backend: Declare local variables at the point they're first "
-@@ -608,17 +616,52 @@ CWriter::printTypeName(raw_ostream &Out, Type *Ty, bool isSigned,
+@@ -158,6 +166,14 @@ static bool isEmptyType(Type *Ty) {
+ 
+ bool CWriter::isEmptyType(Type *Ty) const { return llvm_cbe::isEmptyType(Ty); }
+ 
++/// [0 x T] of a real T: a struct's last member is printed as the flexible
++/// array member "T fieldN[]" (printStructDeclaration).
++static bool isFlexibleArray(Type *Ty) {
++  ArrayType *AT = dyn_cast<ArrayType>(Ty);
++  return AT && AT->getNumElements() == 0 && isEmptyType(AT) &&
++         !isEmptyType(AT->getElementType());
++}
++
+ /// Peel off outer array types which have zero elements.
+ /// This is useful for pointers types. It isn't reasonable for values.
+ Type *CWriter::skipEmptyArrayTypes(Type *Ty) const {
+@@ -608,17 +624,52 @@ CWriter::printTypeName(raw_ostream &Out, Type *Ty, bool isSigned,
    }
  }
  
@@ -70,7 +85,7 @@ index 8d57096..c11f95c 100644
      if (empty)
        Out << "/* "; // skip zero-sized types
      printTypeName(Out, *I, false) << " field" << utostr(Idx);
-@@ -627,10 +670,15 @@ raw_ostream &CWriter::printStructDeclaration(raw_ostream &Out,
+@@ -627,10 +678,15 @@ raw_ostream &CWriter::printStructDeclaration(raw_ostream &Out,
      else
        Out << ";\n";
    }
@@ -86,7 +101,7 @@ index 8d57096..c11f95c 100644
    if (STy->isPacked())
      Out << "#ifdef _MSC_VER\n#pragma pack(pop)\n#endif\n";
    return Out;
-@@ -895,9 +943,15 @@ raw_ostream &CWriter::printArrayDeclaration(raw_ostream &Out, ArrayType *ATy) {
+@@ -895,9 +951,15 @@ raw_ostream &CWriter::printArrayDeclaration(raw_ostream &Out, ArrayType *ATy) {
    cwriter_assert(!isEmptyType(ATy));
    // Arrays are wrapped in structs to allow them to have normal
    // value semantics (avoiding the array "decay").
@@ -102,7 +117,7 @@ index 8d57096..c11f95c 100644
    return Out;
  }
  
-@@ -1176,8 +1230,12 @@ void CWriter::printConstant(Constant *CPV, enum OperandContext Context) {
+@@ -1176,8 +1238,12 @@ void CWriter::printConstant(Constant *CPV, enum OperandContext Context) {
  
      case Instruction::GetElementPtr:
        Out << "(";
@@ -116,7 +131,7 @@ index 8d57096..c11f95c 100644
        Out << ")";
        return;
      case Instruction::Select:
-@@ -1538,12 +1596,35 @@ void CWriter::printConstant(Constant *CPV, enum OperandContext Context) {
+@@ -1538,12 +1604,35 @@ void CWriter::printConstant(Constant *CPV, enum OperandContext Context) {
        Out << "{ ";
      }
  
@@ -152,7 +167,7 @@ index 8d57096..c11f95c 100644
          if (printed)
            Out << ", ";
          printConstant(Constant::getNullValue(ElTy), Context);
-@@ -1556,6 +1637,7 @@ void CWriter::printConstant(Constant *CPV, enum OperandContext Context) {
+@@ -1556,6 +1645,7 @@ void CWriter::printConstant(Constant *CPV, enum OperandContext Context) {
          Constant *C = cast<Constant>(CPV->getOperand(i));
          if (isEmptyType(C->getType()))
            continue;
@@ -160,7 +175,7 @@ index 8d57096..c11f95c 100644
          if (printed)
            Out << ", ";
          printConstant(C, Context);
-@@ -2547,6 +2629,13 @@ void CWriter::generateHeader(Module &M) {
+@@ -2547,6 +2637,13 @@ void CWriter::generateHeader(Module &M) {
          Out << "__thread ";
  
        Type *ElTy = I->getValueType();
@@ -174,7 +189,7 @@ index 8d57096..c11f95c 100644
        unsigned Alignment = I->getAlignment();
        bool IsOveraligned =
            Alignment && Alignment > TD->getABITypeAlign(ElTy).value();
-@@ -2594,6 +2683,11 @@ void CWriter::generateHeader(Module &M) {
+@@ -2594,6 +2691,11 @@ void CWriter::generateHeader(Module &M) {
        case Intrinsic::ssub_sat:
        case Intrinsic::sshl_sat:
        case Intrinsic::ushl_sat:
@@ -186,7 +201,7 @@ index 8d57096..c11f95c 100644
        case Intrinsic::bswap:
        case Intrinsic::ceil:
        case Intrinsic::ctlz:
-@@ -2630,7 +2724,11 @@ void CWriter::generateHeader(Module &M) {
+@@ -2630,7 +2732,11 @@ void CWriter::generateHeader(Module &M) {
            I->getName() == "trunc" || I->getName() == "truncf" ||
            I->getName() == "rint" || I->getName() == "rintf" ||
            I->getName() == "floor" || I->getName() == "floorf" ||
@@ -199,7 +214,7 @@ index 8d57096..c11f95c 100644
          I->getName() == "alloca" || I->getName() == "_alloca" ||
          I->getName() == "_chkstk" || I->getName() == "__chkstk" ||
          I->getName() == "___chkstk_ms")
-@@ -2714,8 +2812,11 @@ void CWriter::generateHeader(Module &M) {
+@@ -2714,8 +2820,11 @@ void CWriter::generateHeader(Module &M) {
  
        Type *ElTy = I->getValueType();
        unsigned Alignment = I->getAliaseeObject()->getAlignment();
@@ -212,7 +227,7 @@ index 8d57096..c11f95c 100644
        if (IsOveraligned) {
          headerUseAligns();
          Out << "__PREFIXALIGN__(" << Alignment << ") ";
-@@ -3602,6 +3703,23 @@ void CWriter::printModuleTypes(raw_ostream &Out) {
+@@ -3602,6 +3711,23 @@ void CWriter::printModuleTypes(raw_ostream &Out) {
    // printed in the correct order.
    Out << "\n/* Types Declarations */\n";
  
@@ -236,7 +251,7 @@ index 8d57096..c11f95c 100644
    // Collect types referenced by structs and global functions, and
    // forward-declare the structs.
    {
-@@ -3628,6 +3746,8 @@ void CWriter::printModuleTypes(raw_ostream &Out) {
+@@ -3628,6 +3754,8 @@ void CWriter::printModuleTypes(raw_ostream &Out) {
    // Emit them now, before the function that uses them is emitted
    for (auto &F : prototypesToGen) {
      Out << '\n';
@@ -245,7 +260,25 @@ index 8d57096..c11f95c 100644
      printFunctionProto(Out, F, GetValueName(F));
      Out << ";\n";
    }
-@@ -4237,6 +4357,20 @@ void CWriter::visitBinaryOperator(BinaryOperator &I) {
+@@ -3673,9 +3801,15 @@ void CWriter::printContainedTypes(raw_ostream &Out, Type *Ty,
+   // Check to see if we have already printed this struct.
+   if (!TypesPrinted.insert(Ty).second)
+     return;
+-  // Skip empty structs
+-  if (isEmptyType(Ty))
++  // Skip empty structs.  A [0 x T] of a real T is a struct's flexible
++  // array member (printStructDeclaration: "T fieldN[]"), which needs T
++  // complete before the struct: print T first.
++  if (isEmptyType(Ty)) {
++    if (ArrayType *AT = dyn_cast<ArrayType>(Ty))
++      if (AT->getNumElements() == 0 && !isEmptyType(AT->getElementType()))
++        printContainedTypes(Out, AT->getElementType(), TypesPrinted);
+     return;
++  }
+ 
+   // Print all contained types first.
+   for (Type::subtype_iterator I = Ty->subtype_begin(), E = Ty->subtype_end();
+@@ -4237,6 +4371,20 @@ void CWriter::visitBinaryOperator(BinaryOperator &I) {
      // Certain instructions require the operand to be forced to a specific type
      // so we use writeOperandWithCast here instead of writeOperand. Similarly
      // below for operand 1
@@ -266,7 +299,7 @@ index 8d57096..c11f95c 100644
      writeOperandWithCast(I.getOperand(0), I.getOpcode());
  
      switch (I.getOpcode()) {
-@@ -4456,6 +4590,13 @@ void CWriter::visitCastInst(CastInst &I) {
+@@ -4456,6 +4604,13 @@ void CWriter::visitCastInst(CastInst &I) {
    Out << ')';
  }
  
@@ -280,7 +313,7 @@ index 8d57096..c11f95c 100644
  void CWriter::visitSelectInst(SelectInst &I) {
    CurInstr = &I;
  
-@@ -4498,7 +4639,7 @@ static void printLimitValue(IntegerType &Ty, bool isSigned, bool isMax,
+@@ -4498,7 +4653,7 @@ static void printLimitValue(IntegerType &Ty, bool isSigned, bool isMax,
    if (isSigned)
      Out << sprefix << type << (isMax ? "_MAX" : "_MIN");
    else
@@ -289,7 +322,7 @@ index 8d57096..c11f95c 100644
  }
  
  #ifndef NDEBUG
-@@ -4532,6 +4673,7 @@ void CWriter::printIntrinsicDefinition(FunctionType *funT, unsigned Opcode,
+@@ -4532,6 +4687,7 @@ void CWriter::printIntrinsicDefinition(FunctionType *funT, unsigned Opcode,
    case Intrinsic::sshl_sat:
    case Intrinsic::smin:
    case Intrinsic::smax:
@@ -297,7 +330,7 @@ index 8d57096..c11f95c 100644
      isSigned = true;
      break;
    }
-@@ -4569,6 +4711,8 @@ void CWriter::printIntrinsicDefinition(FunctionType *funT, unsigned Opcode,
+@@ -4569,6 +4725,8 @@ void CWriter::printIntrinsicDefinition(FunctionType *funT, unsigned Opcode,
      case Intrinsic::ctlz:
      case Intrinsic::cttz:
      case Intrinsic::powi:
@@ -306,7 +339,7 @@ index 8d57096..c11f95c 100644
        break;
      }
      printTypeName(Out, funT->getParamType(i), isSigned);
-@@ -4593,6 +4737,38 @@ void CWriter::printIntrinsicDefinition(FunctionType *funT, unsigned Opcode,
+@@ -4593,6 +4751,38 @@ void CWriter::printIntrinsicDefinition(FunctionType *funT, unsigned Opcode,
        }
        Out << ");\n";
      }
@@ -345,7 +378,7 @@ index 8d57096..c11f95c 100644
    } else if (elemIntT) {
      // handle integer ops
      cwriter_assert(isSupportedIntegerSize(*elemIntT) &&
-@@ -4641,12 +4817,28 @@ void CWriter::printIntrinsicDefinition(FunctionType *funT, unsigned Opcode,
+@@ -4641,12 +4831,28 @@ void CWriter::printIntrinsicDefinition(FunctionType *funT, unsigned Opcode,
  
      case Intrinsic::umul_with_overflow:
        cwriter_assert(cast<StructType>(retT)->getElementType(0) == elemT);
@@ -376,7 +409,7 @@ index 8d57096..c11f95c 100644
        break;
      
      case Intrinsic::uadd_sat:
-@@ -4730,6 +4922,18 @@ void CWriter::printIntrinsicDefinition(FunctionType *funT, unsigned Opcode,
+@@ -4730,6 +4936,18 @@ void CWriter::printIntrinsicDefinition(FunctionType *funT, unsigned Opcode,
        Out << " : r;\n";
        break;
  
@@ -395,7 +428,7 @@ index 8d57096..c11f95c 100644
      case Intrinsic::bswap:
        cwriter_assert(retT == elemT);
        cwriter_assert(!isa<VectorType>(retT));
-@@ -4792,7 +4996,8 @@ void CWriter::printIntrinsicDefinition(FunctionType *funT, unsigned Opcode,
+@@ -4792,7 +5010,8 @@ void CWriter::printIntrinsicDefinition(FunctionType *funT, unsigned Opcode,
        Out << "  r = a < b ? a : b;\n";
        break;
      case Intrinsic::abs:
@@ -405,7 +438,7 @@ index 8d57096..c11f95c 100644
        break;
      case Intrinsic::is_constant:
        Out << "  r = 0 /* llvm.is.constant */;\n";
-@@ -4903,6 +5108,11 @@ bool CWriter::lowerIntrinsics(Function &F) {
+@@ -4903,6 +5122,11 @@ bool CWriter::lowerIntrinsics(Function &F) {
            case Intrinsic::ssub_sat:
            case Intrinsic::ushl_sat:
            case Intrinsic::sshl_sat:
@@ -417,7 +450,7 @@ index 8d57096..c11f95c 100644
            case Intrinsic::bswap:
            case Intrinsic::ceil:
            case Intrinsic::ctlz:
-@@ -5048,10 +5258,12 @@ void CWriter::visitCallInst(CallInst &I) {
+@@ -5048,10 +5272,12 @@ void CWriter::visitCallInst(CallInst &I) {
      // emit cast for the first argument to type expected by header prototype
      // the jmp_buf type is an array, so the array-to-pointer decay adds the
      // strange extra *'s
@@ -432,7 +465,7 @@ index 8d57096..c11f95c 100644
    }
  
    for (; AI != AE; ++AI, ++ArgNo) {
-@@ -5245,6 +5457,11 @@ bool CWriter::visitBuiltinCall(CallInst &I, Intrinsic::ID ID) {
+@@ -5245,6 +5471,11 @@ bool CWriter::visitBuiltinCall(CallInst &I, Intrinsic::ID ID) {
    case Intrinsic::usub_with_overflow:
    case Intrinsic::umul_with_overflow:
    case Intrinsic::smul_with_overflow:
@@ -444,7 +477,37 @@ index 8d57096..c11f95c 100644
    case Intrinsic::bswap:
    case Intrinsic::ctlz:
    case Intrinsic::ctpop:
-@@ -5507,8 +5724,15 @@ void CWriter::printGEPExpression(Value *Ptr, unsigned NumOperands,
+@@ -5481,9 +5712,26 @@ void CWriter::printGEPExpression(Value *Ptr, unsigned NumOperands,
+ 
+   Out << '(';
+   // Start with operand #2: First operand is the Ptr, and first indexing operand
+-  // is special (thus it will print its own `&` if it needs it).
+-  for (unsigned OperandIndex = 2; OperandIndex < NumOperands; ++OperandIndex) {
+-    Out << "(&";
++  // is special (thus it will print its own `&` if it needs it).  An index
++  // into a [0 x T] (a flexible array member, "T fieldN[]") steps over
++  // T: what came before is a pointer to the array, cast to T* first
++  // ("(&((T*)(&p->fieldN))[i])"; a pointer to T[] cannot be indexed).
++  // The prefixes go outermost first: the last index's first.
++  std::vector<Type *> Into;
++  {
++    Type *T = I.getIndexedType();
++    for (gep_type_iterator J = std::next(I); J != E; ++J) {
++      Into.push_back(T);
++      T = J.getIndexedType();
++    }
++  }
++  for (auto R = Into.rbegin(); R != Into.rend(); ++R) {
++    if (isFlexibleArray(*R)) {
++      Out << "(&((";
++      printTypeName(Out, cast<ArrayType>(*R)->getElementType());
++      Out << "*)";
++    } else
++      Out << "(&";
+   }
+ 
+   // The first index of a GEP is special. It does pointer arithmetic without
+@@ -5507,8 +5755,15 @@ void CWriter::printGEPExpression(Value *Ptr, unsigned NumOperands,
        // Print P rather than (&P)[0]
        Out << '(';
        if (SourceType && SourceType.value() != ExposedType.value()) {
@@ -461,7 +524,7 @@ index 8d57096..c11f95c 100644
          Out << "*)";
        }
        Out << '&';
-@@ -5522,7 +5746,9 @@ void CWriter::printGEPExpression(Value *Ptr, unsigned NumOperands,
+@@ -5522,7 +5777,9 @@ void CWriter::printGEPExpression(Value *Ptr, unsigned NumOperands,
        writeOperand(Ptr);
        Out << ")->field" << cast<ConstantInt>(I.getOperand())->getZExtValue()
            << ')';
@@ -472,6 +535,17 @@ index 8d57096..c11f95c 100644
        ++I;
        Out << ')';
      } else {
+@@ -5559,6 +5816,10 @@ void CWriter::printGEPExpression(Value *Ptr, unsigned NumOperands,
+       Out << "->array[";
+       writeOperandWithCast(Opnd, Instruction::GetElementPtr);
+       Out << ']';
++    } else if (isFlexibleArray(IntoT)) {
++      Out << ")[";	// closes the prefix's cast to T*
++      writeOperandWithCast(Opnd, Instruction::GetElementPtr);
++      Out << ']';
+     } else {
+       Out << '[';
+       writeOperandWithCast(Opnd, Instruction::GetElementPtr);
 diff --git a/lib/Target/CBackend/CBackend.h b/lib/Target/CBackend/CBackend.h
 index 2468501..e3c9460 100644
 --- a/lib/Target/CBackend/CBackend.h

@@ -11,8 +11,10 @@
 #	pointer variable, which another unit, calling it as a function,
 #	would not find.  (A copy rather than a call: the alias's type does
 #	not say which arguments are byval structs.)
-#	Inline assembly (only OpenTTD's cpuid) goes too, Plan 9 C has none:
-#	an asm call's result is zero, which for cpuid is "no features".
+#	Inline assembly goes too, Plan 9 C has none: cpuid (OpenTTD's) is
+#	answered with zero, "no features".  Any other asm is an error: its
+#	library must be configured to plain C instead (liblzma's range
+#	decoder, zeroed, broke every xz load).
 import re
 import sys
 
@@ -67,10 +69,14 @@ for line in lines:
 		continue
 	m = asm.match(line)
 	if m:
+		if "cpuid" not in line:
+			sys.exit("localize: inline assembly other than cpuid: configure it out\n" + line[:200])
 		t = m.group(2)
 		out.append("%sselect i1 true, %s zeroinitializer, %s zeroinitializer\n" % (m.group(1), t, t))
 		continue
 	if re.match(r"^\s*(tail |notail )?call void asm ", line):
+		if "cpuid" not in line:
+			sys.exit("localize: inline assembly other than cpuid: configure it out\n" + line[:200])
 		continue
 	if re.match(r"^\$(\"[^\"]+\"|[-\w.$]+)\s*=\s*comdat\b", line):
 		continue

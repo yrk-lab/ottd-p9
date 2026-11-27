@@ -17,6 +17,8 @@ data=$work/data			# XDG_DATA_HOME for test runs: baseset
 opengfx=7.1
 zlibtag=v1.3.1			# the system's version, so native and translated builds agree
 zlib=$work/zlib			# its sources, translated with the program
+xztag=v5.8.3			# liblzma: the system's version too
+xz=$work/xz			# its sources, translated with the program
 
 PATH=/usr/lib/llvm-17/bin:$PATH
 

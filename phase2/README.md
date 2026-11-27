@@ -33,6 +33,28 @@ LLVM made module-level names unique, and C++ file-local names are mangled.
     first; Plan 9 dial/announce later)
   - 1-byte atomics
 
+## liblzma inside (2026-11-27, issue #8)
+
+xz 5.8.3 (the system's liblzma, which the native builds link) is translated with the program, as zlib is:
+`../phase1/translate.sh`'s ir step configures it down with its own CMake build and compiles each of its 57
+sources to IR with the defines that build chose. Configured: LZMA1/LZMA2 only (OpenTTD uses the .xz stream
+encoder and the auto decoder), no threads, no CPU-specific CRC (CLMUL...), no unaligned-access fast paths
+(`TUKLIB_FAST_UNALIGNED_ACCESS=OFF`: they are the SSE2 code in memcmplen.h and lz_decoder.h), and the range
+decoder in C (`LZMA_RANGE_DECODER_CONFIG=0`: on x86-64 it is inline assembly). That last one was found the hard
+way: localize.py answered all inline asm with zeros (meant for OpenTTD's cpuid), which made every xz load crash
+in lzma_decode; it now refuses any asm but cpuid. LibLZMA is on again in build_ref and build_p9.
+
+With liblzma, every run first loads the title screen's game (opntitle.dat, an xz save), which leaves a few
+bytes of viewport state in the gate's saves: the expected saves changed for all builds alike (world 8a190f66...,
+regression d2e265d9...). The stock build is the reference now (`gate.sh cmp ref ...`): goken, Linux and native
+builds give the same saves.
+
+Also fixed on the way: llvm-cbe printed a struct with a flexible array member before the member's type, and
+indexed the member through a pointer to the incomplete array (liblzma's index.c); and the per-unit mkfile's
+recipes ran in sh, not rc (plan9port's mk takes MKSHELL only from the mkfile itself, not an included file),
+where `$prereq` came through the environment and was cut short once it grew past 19 KB: MKSHELL is in the
+mkfile now, and the link reads its objects from units.link.
+
 ## Sends batched: the client that never acknowledged (2026-11-27, issue #7)
 
 The stock client sometimes joined the 9front server, played, and was dropped after 500 ticks "to join". With

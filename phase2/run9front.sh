@@ -14,8 +14,8 @@
 #	- the socket tests (../phase0/tests_net), translated, against
 #	  their output on Linux;
 #	- the gate scenarios: their saves, normalized, go to
-#	  ../phase1/out/9front and are compared with the translated Linux
-#	  build's (tr);
+#	  ../phase1/out/9front and are compared with the reference
+#	  build's (ref: the stock build, ../phase1/build_ref.sh);
 #	- with gui=1, the Plan 9 video driver on the bare screen (VGA, no
 #	  rio) for $guitime seconds (default 120): the screen (topng) is
 #	  work/9front-screen.t.png $guishots seconds after the draw shim's
@@ -234,7 +234,7 @@ for s in world regression; do
 	[ -f "$f9/gate/$s.sav" ] &&
 		python3 "$repo/phase1/savenorm.py" "$f9/gate/$s.sav" "$o/$s.sav"
 done
-"$repo/phase1/gate.sh" cmp tr 9front || fail=1
+"$repo/phase1/gate.sh" cmp ref 9front || fail=1
 
 if [ -n "${gui:-}" ]; then
 	echo "== video driver"

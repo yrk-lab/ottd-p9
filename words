@@ -490,3 +490,17 @@ Next steps now (replace section 10's first two items):
 - VM ACCESS: termrc.local starts aux/listen1 -t tcp!*!17019 /bin/rc and tcp!*!17564 /bin/exportfs -s (exportfs
   has no auth itself; p9p 9p attaches fine); hostfwd 127.0.0.1 only. phase2/vmsh (nc -N), phase2/vmfs (9p -a).
   keep=1 skips the reboot. Gotcha: `pgrep -f qemu-system` matches the waiting shell's own command line.
+- LIBLZMA (2026-11-27, #8): xz v5.8.3 (= system liblzma) in phase1/work/xz (setup.sh), configured down by its own
+  CMake into work/build-xz (translate.sh lzma_ir, options in $xzopts): lzma1/lzma2 only, no threads, no CLMUL/ARM64/
+  LoongArch CRC, TUKLIB_FAST_UNALIGNED_ACCESS=OFF (gates the SSE2 paths), -DLZMA_RANGE_DECODER_CONFIG=0 (x86-64
+  range decoder is INLINE ASM; localize.py zeroed it -> segfault in lzma_decode on every xz load; localize now
+  rejects any asm except cpuid). 57 units, defines from compile_commands.json, shlex-quoted (PACKAGE_NAME="XZ Utils").
+  LibLZMA re-enabled in build_ref/build_p9: must pass -DCMAKE_DISABLE_FIND_PACKAGE_LibLZMA=OFF explicitly (cache).
+  WITH_LIBLZMA is global -> one full native rebuild + full IR (~26 min) but translated C mostly unchanged.
+  Gate references CHANGED (title game now loads first; viewport bytes): ref world 8a190f66, regression d2e265d9;
+  tu/linux/p9 == ref. tr (whole-program) is stale; compare against ref from now on (run9front: cmp ref 9front).
+  Debug method that found it: tiny unxz harness linking translated lzma objects, swap one native object at a time
+  (found lzma_decoder), then native-compile the localized IR (crashed too) -> localize, not cbe.
+  Other fixes: cbe flexible array member (struct order + GEP via (T*) cast); p9p mk MKSHELL only honored in the
+  mkfile itself (included config ignored -> recipes ran in sh and $prereq >19KB got truncated); link list in
+  units.link.

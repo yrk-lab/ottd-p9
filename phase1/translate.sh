@@ -1,8 +1,8 @@
 #!/bin/bash
 # translate [step...]
 #	OpenTTD through the translator, into work/tr:
-#	ir	every unit of build-p9 (compile_commands.json) and zlib to
-#		LLVM bitcode
+#	ir	every unit of build-p9 (compile_commands.json), zlib and
+#		liblzma to LLVM bitcode
 #	link	link them, with what they need of the libc++/libc++abi IR
 #		archive (phase0 linkcxx), into one module; internalize
 #		everything but main; drop dead code
@@ -49,6 +49,56 @@ do_ir()
 		echo "$tr/ir/zlib/$f.bc" >>"$tr/ir/units.txt"
 	done
 	echo "zlib: $(echo $zlibsrcs | wc -w) units"
+	lzma_ir
+}
+
+# liblzma, configured down with its own CMake build (only its compile
+# commands are used: the defines it chose): LZMA1/LZMA2 only (what
+# .xz saves use; no BCJ filters, microlzma, lzip), no threads, no
+# CLMUL or other CPU-specific CRC, no unaligned-access fast paths
+# (they are SSE2 code: memcmplen, the dictionary copy), the range
+# decoder in C (LZMA_RANGE_DECODER_CONFIG=0: on x86-64 it is inline
+# assembly), static, no tools.  Each source is a unit; one is compiled again when its
+# command or source changed.
+xzopts="-DBUILD_SHARED_LIBS=OFF -DXZ_THREADS=no -DXZ_CLMUL_CRC=OFF -DXZ_ARM64_CRC32=OFF
+-DXZ_LOONGARCH_CRC32=OFF -DTUKLIB_FAST_UNALIGNED_ACCESS=OFF -DXZ_NLS=OFF -DXZ_SANDBOX=no
+-DXZ_ENCODERS=lzma1;lzma2 -DXZ_DECODERS=lzma1;lzma2 -DXZ_MICROLZMA_ENCODER=OFF
+-DXZ_MICROLZMA_DECODER=OFF -DXZ_LZIP_DECODER=OFF -DXZ_TOOL_XZ=OFF -DXZ_TOOL_XZDEC=OFF
+-DXZ_TOOL_LZMADEC=OFF -DXZ_TOOL_LZMAINFO=OFF -DXZ_TOOL_SCRIPTS=OFF -DXZ_DOC=OFF -DBUILD_TESTING=OFF"
+
+lzma_ir()
+{
+	local b=$work/build-xz o=$tr/ir/lzma n=0 src out cmd flags
+	[ -d "$xz" ] || fatal "no $xz: run setup.sh"
+	if [ ! -f "$b/compile_commands.json" ] || [ "$(cat "$b/opts" 2>/dev/null)" != "$xzopts" ]; then
+		rm -rf "${b:?}"
+		cmake -S "$xz" -B "$b" -G Ninja -Wno-dev -DCMAKE_C_COMPILER=clang-17 \
+			-DCMAKE_EXPORT_COMPILE_COMMANDS=ON $xzopts >"$work/build-xz.log" 2>&1 ||
+			fatal "cannot configure xz: $work/build-xz.log"
+		echo "$xzopts" >"$b/opts"
+	fi
+	# a line each: the source, a tab, its defines and includes, quoted
+	while IFS=$'\t' read -r src cmd; do
+		out=$o/${src#"$xz/src/"}
+		out=${out%.c}.bc
+		mkdir -p "$(dirname "$out")"
+		eval "flags=($cmd)"	# shell-quoted: PACKAGE_NAME is "XZ Utils"
+		flags+=(-DLZMA_RANGE_DECODER_CONFIG=0)
+		cmd="$cflags $cmd -DLZMA_RANGE_DECODER_CONFIG=0"
+		if [ ! "$out" -nt "$src" ] || [ "$(cat "${out%.bc}.cmd" 2>/dev/null)" != "$cmd" ]; then
+			clang-17 $cflags "${flags[@]}" -c -emit-llvm "$src" -o "$out" || return 1
+			echo "$cmd" >"${out%.bc}.cmd"
+		fi
+		echo "$out" >>"$tr/ir/units.txt"
+		n=$((n+1))
+	done < <(python3 -c '
+import json, shlex, sys
+for c in json.load(open(sys.argv[1])):
+	a = shlex.split(c["command"])
+	keep = [x for x in a if x.startswith(("-D", "-I"))]
+	print(c["file"] + "\t" + " ".join(shlex.quote(x) for x in keep))
+' "$b/compile_commands.json")
+	echo "liblzma: $n units"
 }
 
 do_link()

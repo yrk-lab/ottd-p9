@@ -1,8 +1,7 @@
 #!/bin/bash
 # setup
-#	Fetch the OpenTTD release, zlib (translated with it) and the OpenGFX
-#	base graphics, and make
-#	the stock source tree src-ref.  Both src-ref and the patched
+#	Fetch the OpenTTD release, zlib and xz (translated with it) and
+#	the OpenGFX base graphics, and make the stock source tree src-ref.  Both src-ref and the patched
 #	src-p9 are exported without .git and share one .ottdrev, so the
 #	two builds carry the same version string and their saves can be
 #	compared byte for byte.
@@ -29,6 +28,10 @@ cp "$work/ottdrev" "$ref/.ottdrev"
 
 if [ ! -d "$zlib" ]; then
 	git -c advice.detachedHead=false clone -q --depth 1 --branch "$zlibtag" https://github.com/madler/zlib.git "$zlib"
+fi
+
+if [ ! -d "$xz" ]; then
+	git -c advice.detachedHead=false clone -q --depth 1 --branch "$xztag" https://github.com/tukaani-project/xz.git "$xz"
 fi
 
 if [ ! -d "$data/openttd/baseset/opengfx" ]; then
