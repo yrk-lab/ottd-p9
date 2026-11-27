@@ -453,3 +453,19 @@ Next steps now (replace section 10's first two items):
   * Dedicated check now also fails on "is dropped"/"made an error" (a CPU-starved run dropped the client
     for slow map download but grep still passed).
   Old whole-program goken dir phase2/work/p9 (546 MB) is unused now; build9.sh kept for comparison only.
+- PHASE 3 (2026-11-27): the plan9 video driver DRAWS on both targets.
+  * p9p loop: phase3/run_p9p.sh = sys=linux buildtu + run obj.linux/openttd -v plan9 (WSLg DISPLAY=:0, devdraw):
+    main menu renders (phase3/work/shot.png). Title game needs liblzma (opntitle.dat is xz): "Loader for 'lzma'".
+  * 9front: gui=1 run9front.sh; termrc.local runs screenrc FIRST (termrc calls screenrc after termrc.local;
+    without it initdraw fails: "no Plan 9 draw device"). Bare VGA 1024x768x32, menu renders (9front-screen.png).
+  * BUG FOUND: 6c rounds every struct to 8 bytes on amd64: P9Event (5 ints) was 24 in the shim, 20 in the
+    translated C++ -> memset/copy clobbered the low half of PollEvent's return address -> fault pc=0 with a
+    stale-looking stack. Fixed with an explicit `int pad` on both sides (p9draw.h, plan9_v.cpp). RULE: structs
+    crossing the translated/native boundary must have a size that is a multiple of 8.
+  * Debugging on 9front: build.rc dumps a Broken process with acid (lstk, regs, raw stack words symbolized);
+    host side: /tmp scratch p9syms.py parses the Plan 9 a.out symbol table (z/Z path entries are 16-bit index
+    lists), objdump -b binary -m i386:x86-64 at file offset vaddr-0x200000 disassembles it. 6c passes arg 1
+    in BP (RARG). setjmp's saved PC is the frame's +0x2d-ish, don't mistake it for the faulting call.
+  * u9fs short writes: write loops needed (writeshot); rc can't take env assignments from a list variable.
+  * OPEN: dedicated-server join intermittently dropped ("took longer than 500 ticks to join", client ACKs
+    not seen by the server) - 2 of 4 runs; suspect net9f receive path. Issue filed.

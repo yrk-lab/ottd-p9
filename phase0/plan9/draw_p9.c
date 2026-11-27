@@ -107,10 +107,13 @@ writeshot(void)
 		q[0] = p[2];
 		q[2] = c;
 	}
+	/* a write to a file server may be short (u9fs): write it all */
 	fd = create(shot, OWRITE, 0644);
 	if(fd >= 0){
 		fprint(fd, "P6\n%d %d\n255\n", w, h);
-		write(fd, b, w*h*3);
+		for(p = b, n = w*h*3; n > 0; p += i, n -= i)
+			if((i = write(fd, p, n)) <= 0)
+				break;
 		close(fd);
 	}
 	free(b);

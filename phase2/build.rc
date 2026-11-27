@@ -11,8 +11,10 @@
 #	- plays the Phase 1 gate scenarios for $ticks ticks (default
 #	  100000): 9f/gate/world.sav, 9f/gate/regression.sav;
 #	- with 9f/gui/openttd.cfg, runs the game with the Plan 9 video
-#	  driver on the screen for $guitime seconds (default 120), the
-#	  draw shim writing a screenshot to 9f/gui/shot.ppm;
+#	  driver on the screen for $guitime seconds (default 120), once
+#	  for each frame number in $guishots (default 200), the draw shim
+#	  writing a screenshot to 9f/gui/shot.ppm at that frame (0: none);
+#	  a run that faults leaves its stack in 9f/gui/stack.n;
 #	- with 9f/ded/openttd.cfg, starts a dedicated server (port 3979),
 #	  says so in 9f/ded/ready, and stops it when the host's client is
 #	  done (9f/ded/done) or after $dedtime seconds (default 600).
@@ -108,22 +110,50 @@ for(s in world regression)
 	play $s
 date
 
-# the video driver, on the screen
+# the video driver, on the screen: one run per frame number in
+# $guishots (default 200), the draw shim writing its screenshot at that
+# frame (0: none), each for $guitime seconds (default 120)
+fn guirun {
+	n=$1
+	# the shim's environment: rc takes no assignments from a list
+	p9drawshot=()
+	p9drawshotat=()
+	if(! ~ $n 0){
+		p9drawshot=$d/shot.ppm
+		p9drawshotat=$n
+	}
+	XDG_DATA_HOME=$d/data XDG_CONFIG_HOME=$d/config \
+		$o/openttd -x -c $d/openttd.cfg -v plan9 -s null -m null -d driver^'='^3 >$d/log.$n >[2=1] &
+	pid=$apid
+	sleep $guitime
+	# a faulted process is kept Broken: its stack, for the log
+	if(ps | grep -s '^[^ ]+ +'^$pid^' .*Broken'){
+		{
+			echo 'lstk()'
+			echo 'regs()'
+			# a call through nil leaves no frame: the words around the stack top, as symbols
+			echo 'sp=*SP-128; i=0; while i<64 do { a=fmt(sp+8*i, ''Y''); print(fmt(sp+8*i, ''Y''), " ", fmt(*a, ''a''), "\n"); i=i+1; }'
+		} | acid $pid >$d/stack.$n >[2=1]
+		echo video driver, shot at $n: broken, stack in gui/stack.$n
+	}
+	if(test -e /proc/$pid)
+		echo kill >/proc/$pid/note
+	sleep 1
+	echo video driver log, shot at $n:
+	grep -v '^$' $d/log.$n | tail -10
+}
+
 if(test -f $out/gui/openttd.cfg){
 	d=$out/gui
 	if(~ $#guitime 0)
 		guitime=120
+	if(~ $#guishots 0)
+		guishots=200
 	cp $d/openttd.cfg /tmp/gui.cfg
 	personal $d
 	mv /tmp/gui.cfg $d/openttd.cfg
-	XDG_DATA_HOME=$d/data XDG_CONFIG_HOME=$d/config p9drawshot=$d/shot.ppm p9drawshotat=200 \
-		$o/openttd -x -c $d/openttd.cfg -v plan9 -s null -m null -d driver^'='^3 >$d/log >[2=1] &
-	pid=$apid
-	sleep $guitime
-	echo kill >/proc/$pid/note
-	sleep 1
-	echo video driver log:
-	grep -v '^$' $d/log | tail -10
+	for(n in $guishots)
+		guirun $n
 }
 
 # a dedicated server for the host's client
@@ -150,7 +180,8 @@ if(test -f $out/ded/openttd.cfg){
 		sleep 1
 		i=`{echo $i + 1 | hoc}
 	}
-	echo kill >/proc/$pid/note
+	if(test -e /proc/$pid)
+		echo kill >/proc/$pid/note
 	sleep 1
 	echo dedicated server log:
 	grep -v '^$' $d/log | tail -20

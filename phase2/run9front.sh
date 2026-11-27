@@ -72,14 +72,17 @@ cat >"$root/rc/bin/termrc.local" <<'RC'
 if(~ $p9test ottd){
 	if(! grep -s '^127\.0\.0\.1 ' /net/ipselftab)
 		ip/ipconfig -P loopback /dev/null 127.1
+	# the screen (vgasize, monitor, mouseport from the boot line):
+	# termrc sets it up after termrc.local
+	screenrc
 	srv -nc tcp!10.0.2.100!565 ottd /n/ottdfs
 	bind /n/ottdfs/ottd /n/ottd
-	objtype=amd64 NPROC=2 ticks=TICKS guitime=GUITIME rc /n/ottd/phase2/build.rc >/n/ottd/phase2/work/9f/results.txt >[2=1]
+	objtype=amd64 NPROC=2 ticks=TICKS guitime=GUITIME guishots=(GUISHOTS) rc /n/ottd/phase2/build.rc >/n/ottd/phase2/work/9f/results.txt >[2=1]
 	cat /n/ottd/phase2/work/9f/results.txt
 	echo reboot >/dev/reboot
 }
 RC
-sed -i "s/TICKS/${ticks:-100000}/; s/GUITIME/${guitime:-120}/" "$root/rc/bin/termrc.local"
+sed -i "s/TICKS/${ticks:-100000}/; s/GUITIME/${guitime:-120}/; s/GUISHOTS/${guishots:-200}/" "$root/rc/bin/termrc.local"
 
 accel=
 wrap=
@@ -163,7 +166,7 @@ if [ -n "${gui:-}" ]; then
 			echo "screenshot: $here/work/9front-screen.png"
 	else
 		echo "no screenshot"
-		[ -f "$f9/gui/log" ] && tail -10 "$f9/gui/log"
+		tail -10 "$f9"/gui/log.* 2>/dev/null
 		fail=1
 	fi
 fi

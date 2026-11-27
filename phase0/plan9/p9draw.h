@@ -15,6 +15,7 @@ struct P9Event
 	int	y;
 	int	buttons;	/* P9Emouse: 1 left, 2 middle, 4 right, 8 16 the wheel */
 	int	rune;		/* P9Echar, P9Ekeydown, P9Ekeyup */
+	int	pad;		/* 6c rounds a struct up to 8 bytes: 24 on both sides */
 };
 
 enum

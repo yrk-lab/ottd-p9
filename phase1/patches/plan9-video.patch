@@ -1,6 +1,6 @@
 --- src-ref/src/video/plan9_v.cpp	1970-01-01 01:00:00.000000000 +0100
 +++ src-p9/src/video/plan9_v.cpp	1970-01-01 01:00:00.000000000 +0100
-@@ -0,0 +1,345 @@
+@@ -0,0 +1,346 @@
 +/*
 + * This file is part of OpenTTD.
 + * OpenTTD is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 2.
@@ -39,6 +39,7 @@
 +		int y;
 +		int buttons; ///< Mouse: 1 left, 2 middle, 4 right, 8 and 16 the wheel.
 +		int rune;    ///< Key: the Plan 9 rune.
++		int pad;     ///< Plan 9's compilers round a struct up to 8 bytes: this makes it 24 on both sides.
 +	};
 +
 +	int p9draw_init(const char *label, int *w, int *h);
@@ -403,7 +404,7 @@
 +
 +#endif /* VIDEO_PLAN9_H */
 --- src-ref/src/video/CMakeLists.txt	2026-04-04 16:16:04.000000000 +0100
-+++ src-p9/src/video/CMakeLists.txt	2026-11-26 22:23:13.733289008 +0000
++++ src-p9/src/video/CMakeLists.txt	2026-11-26 22:23:57.873560397 +0000
 @@ -32,6 +32,12 @@
          win32_v.h
          CONDITION WIN32
@@ -418,7 +419,7 @@
  
  add_files(
 --- src-ref/CMakeLists.txt	2026-04-04 16:16:04.000000000 +0100
-+++ src-p9/CMakeLists.txt	2026-11-26 22:23:57.536422098 +0000
++++ src-p9/CMakeLists.txt	2026-11-26 22:23:57.873819797 +0000
 @@ -182,7 +182,7 @@
  show_options()
  
