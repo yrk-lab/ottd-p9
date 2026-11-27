@@ -550,3 +550,12 @@ Next steps now (replace section 10's first two items):
   body: Ehtls fields named x*. mkgen: runtime headers (RTHDR) as prerequisites via a recipe-less rule
   (in metarules they made mk ambiguous). rt.c guards weak. libunits.py: single-file llvm-nm has no header.
   Tests: phase0/tu/test.sh (goken+linux), tests_tu/t1 expected added, t2 threads. 9front run via vmsh script.
+- CTRL+Q / PLUMB / BUNDLE MKFILE (2026-11-27): TypeRune: control chars 0x01-0x1A (not tab/nl/cr/bs) = Ctrl+letter
+  even without key state (p9p) -> Ctrl+Q works (in-game exit dialog; title screen quits at once = upstream
+  HandleExitGameRequest). Web links (#13): plan9-plumb.patch OSOpenBrowser -> p9plumb(url) (old code forked the
+  whole game and exit(0)'d the child: atexit handlers!). plumb9f.c = libplumb plumbsend (p9p libplumb lacks
+  plumbsendtext; and needs lib9pclient -> libthread -> its own main = conflict) ; plumbp9p.c = posix_spawnp plumb.
+  build.rc GUI stage starts plumber + `cat /mnt/plumb/web >gui/plumbed`. Bundle: openttd-<ver>-plan9-amd64.tgz with
+  README.md (OpenTTD's), README.Plan9 (ours), mkfile: mk install (BIN default $home/bin/$cputype -> data
+  $home/lib/openttd; other BIN -> /sys/lib/openttd), mk uninstall. Del key: OpenTTD's delete_windows hotkey, keep;
+  the Plan 9 "interrupt" NOTE -> quit request: next.

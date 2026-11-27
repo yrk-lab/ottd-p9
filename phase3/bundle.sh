@@ -6,8 +6,10 @@
 #	openttd/ with the binary as Plan 9 names it before it
 #	is installed (6.openttd), the data the game finds next to it (lang,
 #	ai, game, media, bin, baseset with OpenGFX, OpenSFX and OpenMSX),
-#	the licences, and README (bundle.README: how to run and install
-#	it).  The binary is the one ../phase2/run9front.sh built on 9front
+#	the licences, OpenTTD's README.md, README.Plan9 (bundle.README.Plan9:
+#	how to run and install it) and an mkfile that installs it
+#	(bundle.mkfile: mk install, BIN as usual).  The binary is the one
+#	../phase2/run9front.sh built on 9front
 #	(work/tu/obj.9front/6.openttd): run that first.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
@@ -34,7 +36,9 @@ for s in opengfx opensfx openmsx; do
 done
 mkdir -p "$b/openttd/doc"
 cp "$ref/COPYING.md" "$b/openttd/doc/COPYING.md"
-cp "$here/bundle.README" "$b/openttd/README"
+cp "$here/bundle.README.Plan9" "$b/openttd/README.Plan9"
+cp "$here/bundle.mkfile" "$b/openttd/mkfile"
+cp "$ref/README.md" "$b/openttd/README.md"
 # Plan 9's tar reads ustar; owner and times as in a release
 tar -C "$b" --format=ustar --owner=0 --group=0 --numeric-owner -czf "$tgz" openttd
 echo "$tgz: $(du -h "$tgz" | cut -f1)"

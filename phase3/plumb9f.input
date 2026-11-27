@@ -1,0 +1,8 @@
+# 9front, bare screen 1024x768: no survey, Help & Manuals, its
+# "OpenTTD" website link: plumbed (build.rc's gui/plumbed)
+18 at 437 437
+19 click
+22 at 527 537
+23 click
+27 at 399 359
+28 click

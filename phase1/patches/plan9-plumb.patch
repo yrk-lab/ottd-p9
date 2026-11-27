@@ -1,0 +1,22 @@
+--- src-ref/src/os/unix/unix.cpp	2026-04-04 16:16:04.000000000 +0100
++++ src-p9/src/os/unix/unix.cpp	2026-11-27 20:16:52.751114261 +0000
+@@ -226,6 +226,19 @@
+ 	/* Implementation in pre.js */
+ 	EM_ASM({ if (window["openttd_open_url"]) window.openttd_open_url($0, $1) }, url.data(), url.size());
+ }
++#elif defined(WITH_PLAN9)
++extern "C" int p9plumb(const char *url);
++
++/**
++ * On Plan 9 a URL is plumbed: the plumber passes it on to what the
++ * user's rules say, a browser or nothing (phase0/plan9/plumb9f.c, plumbp9p.c).
++ * No fork: that would copy the whole game, and its exit would run the
++ * game's exit handlers.
++ */
++void OSOpenBrowser(const std::string &url)
++{
++	if (p9plumb(url.c_str()) < 0) Debug(misc, 0, "Failed to plumb url: {}", url);
++}
+ #elif !defined( __APPLE__)
+ void OSOpenBrowser(const std::string &url)
+ {

@@ -1,6 +1,6 @@
 --- src-ref/src/video/plan9_v.cpp	1970-01-01 01:00:00.000000000 +0100
 +++ src-p9/src/video/plan9_v.cpp	1970-01-01 01:00:00.000000000 +0100
-@@ -0,0 +1,346 @@
+@@ -0,0 +1,354 @@
 +/*
 + * This file is part of OpenTTD.
 + * OpenTTD is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 2.
@@ -229,12 +229,20 @@
 +/** A typed character: a key press for the game. */
 +static void TypeRune(char32_t r)
 +{
-+	/* Control combinations arrive as control characters. */
-+	if (_p9_ctrl && r >= 1 && r < 0x20 && r != '\t' && r != '\n' && r != '\r' && r != Kbs && r != Kesc) r += 'a' - 1;
++	/*
++	 * Control combinations arrive as control characters: Ctrl and the
++	 * letter, also where the keyboard tells no keys held (plan9port's
++	 * event(2)), so Ctrl+Q (quit) and the like work everywhere.
++	 */
++	bool ctrl = _p9_ctrl;
++	if (r >= 1 && r <= 0x1a && r != '\t' && r != '\n' && r != '\r' && r != Kbs) {
++		r += 'a' - 1;
++		ctrl = true;
++	}
 +
 +	uint keycode = KeyCode(r);
 +	if (_p9_shift) keycode |= WKC_SHIFT;
-+	if (_p9_ctrl) keycode |= WKC_CTRL;
++	if (ctrl) keycode |= WKC_CTRL;
 +	if (_p9_alt) keycode |= WKC_ALT;
 +
 +	/* Only printable characters go to edit boxes. */
@@ -404,7 +412,7 @@
 +
 +#endif /* VIDEO_PLAN9_H */
 --- src-ref/src/video/CMakeLists.txt	2026-04-04 16:16:04.000000000 +0100
-+++ src-p9/src/video/CMakeLists.txt	2026-11-27 17:09:31.117740664 +0000
++++ src-p9/src/video/CMakeLists.txt	2026-11-27 17:11:07.596688621 +0000
 @@ -32,6 +32,12 @@
          win32_v.h
          CONDITION WIN32
@@ -419,7 +427,7 @@
  
  add_files(
 --- src-ref/CMakeLists.txt	2026-04-04 16:16:04.000000000 +0100
-+++ src-p9/CMakeLists.txt	2026-11-27 17:09:31.139418264 +0000
++++ src-p9/CMakeLists.txt	2026-11-27 17:11:07.596846021 +0000
 @@ -182,7 +182,7 @@
  show_options()
  

@@ -133,6 +133,12 @@ if(test -f $out/gui/openttd.cfg){
 	# they are the screen's (screenshot | topng), taken on time whatever the game
 	# does); the ready file where the host sees it
 	rm -f /tmp/shot.* /tmp/screen.*
+	# the plumber, as a session has it, and what is plumbed to the web
+	# port (the game's links: plumb9f.c) in gui/plumbed
+	if(! test -e /mnt/plumb/send)
+		plumber
+	cat /mnt/plumb/web >$d/plumbed >[2]/dev/null &
+	plumbcat=$apid
 	# with $guiaudio 1, the Plan 9 sound and music drivers (/dev/audio;
 	# music by games/dmid, with 9front's instrument bank)
 	audio=(-s null -m null)
@@ -204,6 +210,7 @@ if(test -f $out/gui/openttd.cfg){
 		echo kill >/proc/$pid/notepg
 	if(~ $guirio 1)
 		slay rio | rc
+	echo kill >/proc/$plumbcat/note >[2]/dev/null
 	sleep 1
 	for(f in `{ls /tmp/screen.*.png >[2]/dev/null})
 		cp $f $d/

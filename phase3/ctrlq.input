@@ -1,0 +1,7 @@
+# Ctrl+Q, the quit hotkey: in a game it asks (the exit dialog); on the
+# title screen OpenTTD quits at once.  The window is 1215x810, as WSLg
+# opens it: no survey, New Game, Generate, then Ctrl+Q
+18 mousemove --window %w 532 458 click 1
+22 mousemove --window %w 586 226 click 1
+26 mousemove --window %w 606 578 click 1
+45 key --window %w ctrl+q

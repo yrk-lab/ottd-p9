@@ -6,7 +6,7 @@ rfork en
 ramfs
 w=/n/ottd/phase3/work
 t=/tmp/bt
-mkdir -p $t/home1 $t/home2/bin/amd64
+mkdir -p $t/home1 $t/home2
 6c -o /tmp/screenshot.6 /n/ottd/phase3/screenshot.c && 6l -o /tmp/screenshot /tmp/screenshot.6
 cd $t
 gunzip <$w/openttd-*-plan9-amd64.tgz | tar x
@@ -36,13 +36,10 @@ fn play {
 cd $t/openttd
 play inplace $t/home1 ./6.openttd
 
-# installed for the user, run from elsewhere
+# installed for the user with its mkfile, run from elsewhere
 home=$t/home2
-cp $t/openttd/6.openttd $home/bin/amd64/openttd
-for(d in lang ai game media bin baseset){
-	mkdir -p $home/lib/openttd/$d
-	dircp $t/openttd/$d $home/lib/openttd/$d
-}
+cd $t/openttd
+mk install
 cd /
 play installed $home $home/bin/amd64/openttd
 echo done

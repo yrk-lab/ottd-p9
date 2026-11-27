@@ -4,7 +4,8 @@ OpenTTD 15.3, translated from C++ to C and compiled with 9front's
 own compilers (https://github.com/yrk-lab/ottd-p9).  This directory
 has the game (6.openttd: a Plan 9 binary, before it is installed),
 the data it needs (lang, ai, game, media, bin, baseset, with the
-free base sets OpenGFX, OpenSFX and OpenMSX) and the licences (doc).
+free base sets OpenGFX, OpenSFX and OpenMSX), an mkfile to install
+it, the licences (doc) and OpenTTD's own README.md.
 
 Run it in place
 
@@ -16,18 +17,15 @@ or on the bare screen.  The game finds its data next to the binary.
 
 Install it
 
-For yourself:
+	mk install
 
-	cp 6.openttd $home/bin/$cputype/openttd
-	for(d in lang ai game media bin baseset){
-		mkdir -p $home/lib/openttd/$d
-		dircp $d $home/lib/openttd/$d
-	}
+for yourself: the binary as $home/bin/$cputype/openttd, the data in
+$home/lib/openttd.  For everyone (as the host owner):
 
-For everyone (as the host owner): the binary as
-/$cputype/bin/openttd and the directories in /sys/lib/openttd.
+	mk BIN=/$cputype/bin install
 
-Then run openttd.
+puts the data in /sys/lib/openttd.  mk uninstall (with the same BIN)
+takes it away again.  Then run openttd.
 
 Where things go
 

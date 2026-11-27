@@ -15,7 +15,9 @@ How keys reach the game: the shim turns the keyboard into events (P9Event). On 9
 after one went down or up) become P9Ekeydown and P9Ekeyup. With plan9port, `kbdp9p.c` has event(2)'s characters
 only. In the driver only P9Echar makes a key press: `TypeRune` maps the rune (`KeyCode`: Esc, the function and
 arrow keys, Enter...) to OpenTTD's key code, adds the modifiers held, and calls `HandleKeypress`; key down and up
-only keep the modifiers and the held arrows (`KeyState`), which scroll the map. Esc, for example, is rune 0x1B,
+only keep the modifiers and the held arrows (`KeyState`), which scroll the map. A control character (0x01 to
+0x1A, not Tab, Enter or Backspace) is Ctrl and its letter even where no keys held are told (plan9port): Ctrl+Q,
+OpenTTD's quit hotkey, asks in a game and quits at once on the title screen, as upstream (`ctrlq.input`). Esc, for example, is rune 0x1B,
 `WKC_ESC`: in the game it cancels the tool in hand (the main toolbar's "reset_object_to_place" hotkey), in a query
 or a text box it cancels, and it closes the load/save dialog and the high scores; it does not close other windows
 (Delete does). In the load/save dialog it takes a second press, as in the stock game (checked against a Windows
@@ -118,8 +120,10 @@ dmid's instrument bank: 9front comes with one, the GENMIDI lump of its shareware
 takes its place, found the way the game finds its other data. Nothing to set.
 
 `bundle.sh` makes `work/openttd-<version>-plan9-amd64.tgz`: `openttd/` with `6.openttd`, the data it finds next to it, the
-licences and README (`bundle.README`: run in place, or install as `$home/bin/$cputype/openttd` with the data in
-`$home/lib/openttd`). Both were checked on 9front from the unpacked bundle with a fresh home (`bundletest.rc`,
+licences, OpenTTD's README.md, ours as README.Plan9 (`bundle.README.Plan9`: run in place, or install) and an
+mkfile (`bundle.mkfile`): `mk install` puts the binary in `$BIN` (default `$home/bin/$cputype`, as openttd) and
+the data in `$home/lib/openttd`; with `BIN` elsewhere (`mk BIN=/$cputype/bin install`) the data goes to
+`/sys/lib/openttd`. Both were checked on 9front from the unpacked bundle with a fresh home (`bundletest.rc`,
 run in the VM through vmsh): the title game, music with 9front's bank. A test must stop the game by its note group
 (`/proc/n/notepg`): libdraw's event processes hold /dev/mouse, and a second game could not open it.
 
@@ -150,3 +154,14 @@ the work runs inline, as before).
   thread at once, a contended static), run by `../phase0/tu/test.sh` (goken, Linux) and on 9front through vmsh:
   the native build's output, 30 of 30 runs on Linux, 10 of 10 on 9front. OpenTTD: the gate is the same on
   goken, Linux (18 threads in 5000 ticks) and 9front; the GUI and the dedicated server run.
+
+## Web links (issue #13)
+
+OpenTTD opens a URL (Help & Manuals' websites, the online content, a readme's links) by running xdg-open; on Plan 9
+it plumbs it (`../phase1/patches/plan9-plumb.patch`, `OSOpenBrowser`), and the plumber passes it on as the user's
+rules say (9front's basic rules: `http(s)://...` to the web port, a browser). `../phase0/plan9/plumb9f.c` does it
+from the game with libplumb; with plan9port `plumbp9p.c` runs its plumb(1) with posix_spawnp (its libplumb needs
+libthread, whose main would be the program's); goken and the native builds have none (`plumb_none.c`). Checked:
+`plumb.input` on plan9port with a plumber running (`9p read plumb/web`), and `plumb9f.input` on 9front, where
+build.rc's GUI stage starts a plumber and keeps what reaches the web port in `work/9f/gui/plumbed`: both got
+`https://www.openttd.org/` from the Help window's OpenTTD link.

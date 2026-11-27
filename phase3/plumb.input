@@ -1,0 +1,4 @@
+# Help & Manuals, then its "OpenTTD" website link: plumbed
+18 mousemove --window %w 532 458 click 1
+22 mousemove --window %w 600 558 click 1
+26 mousemove --window %w 494 380 click 1
