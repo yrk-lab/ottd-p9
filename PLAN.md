@@ -92,6 +92,8 @@ comes with libc++abi's typeinfo code, which the exception runtime needs anyway.
    generation, the running game, mouse and keyboard (held keys on 9front), checked by scripted input (QEMU's
    monitor on 9front, xdotool on Linux) and timed screenshots (`phase3/README.md`). The shim stayed in the same
    process (libdraw is native C linked with the translated game; no split process was needed).
+   **Done 2026-11-27:** also in a rio window (resize), the title game (liblzma, #8), sound and music (#9: /dev/audio,
+   MIDI through games/dmid | games/opl3), and the dedicated server's client drop fixed (#7).
 4. **Upstream-tracking CI.** Script bumps the tag, regenerates C, builds, reruns the Phase 1 savegame check.
 
 ## Phase 0.5: Plan 9 compiler acceptance (added after research; gate before Phase 1)
