@@ -96,8 +96,9 @@ the game, over a shim of ints and pointers (`../phase0/plan9/p9audio.h`):
   tick, as Allegro's): it mixes as much as the shim takes, up to 186 ms ahead, into a ring that a helper process
   (rfork RFMEM) writes to `/dev/audio`, whose writes keep the pace (`audio9f.c`). The mixer itself never leaves
   the game's process: the runtime's mutexes are no-ops.
-- music: OpenMSX's songs are MIDI files; `games/dmid` (with Freedoom's GENMIDI bank, which setup.sh fetches)
-  makes them OPL3 instructions and `games/opl3` plays them; a helper reads the pipeline's PCM into a second ring,
+- music: OpenMSX's songs are MIDI files; `games/dmid` makes them OPL3 instructions and `games/opl3` plays them
+  (resampled by its own `pcmconv`). The rc that starts them execs opl3, which reads dmid through `<{}`, so no
+  shell waits: `exec games/opl3 <{games/dmid -i bank song}`. A helper reads the pipeline's PCM into a second ring,
   which the mixer takes as its music source (`MxSetMusicSource`, as FluidSynth's driver), so one writer has
   /dev/audio. A full ring holds the pipeline back: music is made as fast as it is played.
 - plan9port (`audiop9p.c`): no /dev/audio; with `$p9audio` the sound goes to that file, paced by the clock (no
@@ -113,7 +114,8 @@ Checked:
 The second gives QEMU an Intel HDA card (9front's pc64 kernel has HDA, not AC97; `audio0=type=hda` on the boot
 line) whose output QEMU records, `../phase2/work/9front-audio.wav`: the music and the game's sounds, continuous.
 While it plays, `./vmsh ps` shows the game's audio writer in Pwrite on /dev/audio and dmid and opl3 waiting on
-a full pipe.
+a full pipe; wadfs serves the bank (`/mnt/wad` is in opl3's `/proc/n/ns`, not the game's), and goes when the
+pipeline is killed.
 
 ## Names, paths, the bundle
 
@@ -124,7 +126,8 @@ included, is `$home/lib/openttd`, and installed data is searched in `/sys/lib/op
 tests give each run a home of its own (`HOME` on Linux, `home` on 9front).
 
 dmid's instrument bank: 9front comes with one, the GENMIDI lump of its shareware Doom WAD
-(`/sys/games/lib/doom/doom1.wad`), which the shim copies out once; a file `genmidi` in a base set directory
+(`/sys/games/lib/doom/doom1.wad`), which `games/wadfs -r` serves to dmid as `/mnt/wad/genmidi` in the pipeline's
+own namespace (`rfork n`), as dmid(1) does it; nothing is copied, and the game's namespace is left alone. A file `genmidi` in a base set directory
 takes its place, found the way the game finds its other data. Nothing to set.
 
 `bundle.sh` makes `work/openttd-<version>-plan9-amd64.tgz`: `openttd/` with `6.openttd`, the data it finds next to it, the

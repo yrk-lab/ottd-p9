@@ -8,11 +8,12 @@
  * process: the runtime's mutexes are no-ops.
  *
  * Music: games/dmid turns the MIDI file into OPL3 instructions and
- * games/opl3 plays them as PCM.  dmid's instrument bank is the one the
- * driver found among the game's data, else 9front's own: the GENMIDI
- * lump of its shareware Doom WAD, copied out once (dmid wants a file;
- * games/wadfs would serve it too, but in the namespace of whoever
- * mounts it).  A helper reads the pipeline's output into
+ * games/opl3 plays them as PCM (resampled by its own pcmconv).  dmid's
+ * instrument bank is the one the driver found among the game's data,
+ * else 9front's own: the GENMIDI lump of its shareware Doom WAD, which
+ * games/wadfs serves in the pipeline's namespace (rfork n), as dmid(1)
+ * does it.  The rc that starts it execs opl3, which reads dmid through
+ * <{}: no shell is left waiting.  A helper reads the pipeline's output into
  * a second ring, which the mixer takes as its music source, so one
  * writer has /dev/audio.  The ring being full holds the pipeline back:
  * it makes sound as fast as it is played.
@@ -43,9 +44,6 @@ struct Ring
 	int	done;		/* the helper has stopped */
 	void	(*run)(Ring*);	/* the helper */
 };
-
-static char	wad[] = "/sys/games/lib/doom/doom1.wad";
-static char	sysbank[] = "/tmp/openttd.genmidi";
 
 static Ring	out;
 static Ring	music;
@@ -241,61 +239,6 @@ reader(Ring *g)
 	finish(g);
 }
 
-static ulong
-le32(uchar *p)
-{
-	return p[0] | p[1]<<8 | p[2]<<16 | (ulong)p[3]<<24;
-}
-
-/* 9front's instrument bank, as a file: the WAD's GENMIDI lump */
-static char*
-systembank(void)
-{
-	static int done;
-	uchar h[12], e[16], *b;
-	ulong n, dir, o, s, i;
-	int fd, w;
-
-	if(done)
-		return sysbank;
-	fd = open(wad, OREAD);
-	if(fd < 0)
-		return nil;
-	b = nil;
-	if(readn(fd, h, sizeof h) != sizeof h || memcmp(h + 1, "WAD", 3) != 0)
-		goto bad;
-	n = le32(h + 4);
-	dir = le32(h + 8);
-	for(i = 0; i < n; i++){
-		if(pread(fd, e, sizeof e, dir + 16*i) != sizeof e)
-			goto bad;
-		if(memcmp(e + 8, "GENMIDI\0", 8) == 0)
-			break;
-	}
-	if(i == n)
-		goto bad;
-	o = le32(e);
-	s = le32(e + 4);
-	b = malloc(s);
-	if(b == nil || pread(fd, b, s, o) != s)
-		goto bad;
-	w = create(sysbank, OWRITE, 0644);
-	if(w < 0 || write(w, b, s) != s){
-		if(w >= 0)
-			close(w);
-		goto bad;
-	}
-	close(w);
-	free(b);
-	close(fd);
-	done = 1;
-	return sysbank;
-bad:
-	free(b);
-	close(fd);
-	return nil;
-}
-
 /* s, quoted for rc */
 static char*
 rcquote(char *s)
@@ -332,13 +275,15 @@ p9music_play(char *file, char *bank, int rate)
 			return -1;
 		music.n = Nmusic;
 	}
-	if(bank == nil || bank[0] == 0)
-		bank = systembank();
-	if(bank == nil)
-		return -1;
-	qb = rcquote(bank);
 	qf = rcquote(file);
-	cmd = smprint("games/dmid -i %s %s | games/opl3", qb, qf);
+	if(bank != nil && bank[0] != 0){
+		qb = rcquote(bank);
+		cmd = smprint("exec games/opl3 <{games/dmid -i %s %s}", qb, qf);
+	}else{
+		qb = nil;
+		cmd = smprint("rfork n; games/wadfs -r /sys/games/lib/doom/doom1.wad >[2]/dev/null; "
+			"exec games/opl3 <{games/dmid -i /mnt/wad/genmidi %s}", qf);
+	}
 	free(qb);
 	free(qf);
 	if(cmd == nil || pipe(p) < 0){

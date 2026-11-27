@@ -567,3 +567,8 @@ Next steps now (replace section 10's first two items):
   in the game's window stays OpenTTD's delete_windows (game reads /dev/kbd). p9p: kill -INT quits in 1 s.
   Queue filed: #15 thread names (ps -a, /proc/n/args), #16 music exec + wadfs, #17 cursor when not current (rio),
   #18 survey memory from /dev/swap, #19 Phase 5 9legacy/4e (board item). pcmconv is opl3's own (49716->44100).
+- MUSIC PIPELINE (#16, 2026-11-27): audio9f.c p9music_play: bank from game data -> rc -c 'exec games/opl3
+  <{games/dmid -i bank song}'; else 'rfork n; games/wadfs -r /sys/games/lib/doom/doom1.wad >[2]/dev/null; exec
+  games/opl3 <{games/dmid -i /mnt/wad/genmidi song}'. systembank()/le32/tmp copy gone. Checked in the VM: opl3 has
+  the rc's pid, no rc waits, /mnt/wad only in opl3's ns, kill notepg -> opl3, dmid, pcmconv, wadfs all exit
+  (wadfs: RFNOTEG of its own, but ends when the namespace's last mount goes). 9front-audio.wav: sound throughout.
