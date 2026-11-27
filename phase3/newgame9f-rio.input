@@ -1,0 +1,17 @@
+# 9front in rio: the game in an 800x600 window at 40,40, the menu
+# centred in its inside (positions measured from a screenshot): no
+# survey, New Game, Generate; then the keyboard: right arrow held 2 s,
+# the console with the backquote, "help" typed into it
+38 at 390 378
+40 click
+43 at 440 216
+45 click
+49 at 440 453
+51 click
+65 sendkey right 2000
+71 sendkey grave_accent
+74 sendkey h
+74.3 sendkey e
+74.6 sendkey l
+74.9 sendkey p
+75.5 sendkey ret

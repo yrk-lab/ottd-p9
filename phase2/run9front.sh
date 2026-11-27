@@ -24,7 +24,9 @@
 #	  "seconds command" at a time: "at x y" moves the mouse to x y
 #	  (PS/2 is relative: to the corner first, then in small steps),
 #	  "click" presses and releases the left button, anything else
-#	  goes to the monitor (sendkey right 2000; sendkey grave_accent);
+#	  goes to the monitor (sendkey right 2000; sendkey grave_accent).
+#	  With guirio=1 the game runs in a rio window (800x600 at 40,40)
+#	  and with guiresize=n is made 960x700 after n seconds;
 #	- a dedicated server: once it is up, the stock Linux build joins
 #	  it as a client through QEMU's port forward (host port 13979)
 #	  for $clienttime seconds (default 60); the server must report the
@@ -94,13 +96,13 @@ if(~ $p9test ottd){
 	aux/listen1 -t tcp!*!17019 /bin/rc &
 	aux/listen1 -t tcp!*!17564 /bin/exportfs -s &
 	bind /n/ottdfs/ottd /n/ottd
-	objtype=amd64 NPROC=2 ticks=TICKS guitime=GUITIME guishots=(GUISHOTS) netdebug=NETDEBUG rc /n/ottd/phase2/build.rc >/n/ottd/phase2/work/9f/results.txt >[2=1]
+	objtype=amd64 NPROC=2 ticks=TICKS guitime=GUITIME guishots=(GUISHOTS) guirio=GUIRIO guiresize=(GUIRESIZE) netdebug=NETDEBUG rc /n/ottd/phase2/build.rc >/n/ottd/phase2/work/9f/results.txt >[2=1]
 	cat /n/ottd/phase2/work/9f/results.txt
 	if(! ~ KEEP 1)
 		echo reboot >/dev/reboot
 }
 RC
-sed -i "s/TICKS/${ticks:-100000}/; s/GUITIME/${guitime:-120}/; s/GUISHOTS/${guishots:-20}/; s/NETDEBUG/${netdebug:-3}/; s/KEEP/${keep:-0}/" "$root/rc/bin/termrc.local"
+sed -i "s/TICKS/${ticks:-100000}/; s/GUITIME/${guitime:-120}/; s/GUISHOTS/${guishots:-20}/; s/NETDEBUG/${netdebug:-3}/; s/GUIRIO/${guirio:-0}/; s/GUIRESIZE/${guiresize:-}/; s/KEEP/${keep:-0}/" "$root/rc/bin/termrc.local"
 
 accel=
 wrap=

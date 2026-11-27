@@ -114,7 +114,8 @@ date
 # the video driver, on the screen, for $guitime seconds (default 120):
 # gui/shot.ready says the draw shim's window is up (run9front.sh sends
 # its input from then), and gui/screen.t.png is the screen t seconds
-# after, for each t in $guishots (default 20)
+# after, for each t in $guishots (default 20).  With $guirio 1, the game
+# runs in a rio window (and $guiresize: resized after that many seconds)
 if(test -f $out/gui/openttd.cfg){
 	d=$out/gui
 	if(~ $#guitime 0)
@@ -131,9 +132,46 @@ if(test -f $out/gui/openttd.cfg){
 	# they are the screen's (screenshot | topng), taken on time whatever the game
 	# does); the ready file where the host sees it
 	rm -f /tmp/shot.* /tmp/screen.*
-	XDG_DATA_HOME=$d/data XDG_CONFIG_HOME=$d/config p9drawshot=/tmp/shot p9drawshotat=100000 \
-		$o/openttd -x -c $d/openttd.cfg -v plan9 -s null -m null -d driver^'='^3 >$d/log >[2=1] &
-	pid=$apid
+	cmd=($o/openttd -x -c $d/openttd.cfg -v plan9 -s null -m null -d driver^'='^3)
+	if(~ $guirio 1){
+		# in a rio window, as one runs it: rio's -i script opens the
+		# window; with $guiresize, a process finds it in wsys by its
+		# label (the game's caption) and, $guiresize seconds after,
+		# makes it bigger through its wctl
+		{
+			echo '#!/bin/rc'
+			# quoted: a word with = in it is an assignment or an error to rc
+			echo 'XDG_DATA_HOME='$d/data' XDG_CONFIG_HOME='$d/config' p9drawshot=/tmp/shot p9drawshotat=100000' \
+				$o/openttd -x -c $d/openttd.cfg -v plan9 -s null -m null -d '''driver=3''' '>'$d/log '>[2=1]'
+		} >/tmp/game
+		{
+			echo '#!/bin/rc'
+			echo window -r 40 40 840 640 /tmp/game
+			if(! ~ $#guiresize 0){
+				echo '{'
+				echo '	sleep' $guiresize
+				echo '	for(w in /dev/wsys/* /mnt/wsys/wsys/*)'
+				echo '		if(grep -s ''^OpenTTD'' $w/label >[2]/dev/null)'
+				echo '			echo resize -r 40 40 1000 740 >$w/wctl'
+				echo '} &'
+			}
+		} >/tmp/rioinit
+		chmod +x /tmp/game /tmp/rioinit
+		rio -i /tmp/rioinit </dev/null >/dev/null >[2=1] &
+		rio=$apid
+		pid=()
+		i=0
+		while(~ $#pid 0 && test $i -lt 120){
+			sleep 1
+			pid=`{ps | grep ' openttd$' | awk '{print $2}' | sed 1q}
+			i=`{echo $i + 1 | hoc}
+		}
+	}
+	if not{
+		XDG_DATA_HOME=$d/data XDG_CONFIG_HOME=$d/config p9drawshot=/tmp/shot p9drawshotat=100000 \
+			$cmd >$d/log >[2=1] &
+		pid=$apid
+	}
 	while(! test -f /tmp/shot.ready && test -e /proc/$pid)
 		sleep 1
 	touch $d/shot.ready
@@ -157,6 +195,8 @@ if(test -f $out/gui/openttd.cfg){
 	}
 	if(test -e /proc/$pid)
 		echo kill >/proc/$pid/note
+	if(~ $guirio 1)
+		slay rio | rc
 	sleep 1
 	for(f in `{ls /tmp/screen.*.png >[2]/dev/null})
 		cp $f $d/

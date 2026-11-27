@@ -41,4 +41,23 @@ image), `../phase2/work/9front-screen.t.png`, all on one page in `9front-screens
 `newgame9f.input` does the same as on plan9port; on 9front the held right arrow scrolls the map too.
 A run that faults leaves the process's stack (acid) in `work/9f/gui/stack`.
 
-Not yet: the title screen's background game (an xz save: liblzma), sound and music (null drivers).
+### In a rio window
+
+`guirio=1` runs the game as one runs programs on 9front: inside rio, in a window. build.rc starts
+`rio -i script`, whose `window -r 40 40 840 640` opens the game's window; with `guiresize=n` a process finds the
+window in wsys by its label (the game's caption, "OpenTTD ...") and n seconds later writes `resize -r ...` to
+its wctl. Checked: the title game in the window, a resize to 960x700 redrawn at the new size (eresized,
+P9Eresize), and `newgame9f-rio.input`: the same session as on the bare screen, the mouse in window coordinates
+(survey, New Game, the Generate tooltip, Generate), the held arrow scrolling, the console, `help`.
+
+	ticks=100 gui=1 guirio=1 guitime=85 guishots="44 50 58 64 70 80" \
+		guiinput=../phase3/newgame9f-rio.input ../phase2/run9front.sh
+
+The positions in the input scripts are measured from screenshots: the menu's windows are not all centred
+alike, and a click a few pixels off lands on another window (on the title screen, Exit quits at once).
+
+While it runs, rio's windows can be looked at from the host: `./vmsh 'mount /srv/rio.glenda.* /n/rio 1;
+cat /n/rio/wsys/*/label'` (rio wants a window id as attach name; reading a wctl twice waits for the next
+change).
+
+The title screen's game plays (liblzma, ../phase2/README.md).  Not yet: sound and music (null drivers).

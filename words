@@ -504,3 +504,10 @@ Next steps now (replace section 10's first two items):
   Other fixes: cbe flexible array member (struct order + GEP via (T*) cast); p9p mk MKSHELL only honored in the
   mkfile itself (included config ignored -> recipes ran in sh and $prereq >19KB got truncated); link list in
   units.link.
+- PHASE 3 IN RIO (2026-11-27): build.rc guirio=1: rio -i /tmp/rioinit (script: window -r 40 40 840 640 /tmp/game;
+  guiresize=n: background loop finds /dev/wsys/*|/mnt/wsys/wsys/* by label ^OpenTTD, echo resize -r ... >wctl).
+  /tmp/game line must quote 'driver=3' (rc: = in a word). Stop: kill note to the game, then `slay rio | rc`.
+  Verified: title in window, resize redraw, mouse+keyboard (newgame9f-rio.input). Lessons: click targets must be
+  measured from screenshots (menu not centred alike; 30px off hit main menu Exit -> game quit cleanly, looked
+  like a crash). vmsh into rio: mount /srv/rio.glenda.N /n/rio 1 (needs window id aname); 2nd wctl read blocks
+  until change. vmsh/listen1 "incoming call" kernel prints show on the screen console (cosmetic).
