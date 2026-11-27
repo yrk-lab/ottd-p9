@@ -130,10 +130,6 @@ Getting there needed C++ to use `libc_p9.c` too: the earlier printf->print mappi
 - Verified: 7 integer helper functions agree between gcc and 6c over ~1,100 input pairs each.
 - Observed risk: goken 6c was killed (likely out of memory) on one ~4,000-statement straight-line function (a test artefact, fine when split). OpenTTD has large functions, so watch 6c memory at scale.
 
-## Plan B (if cbe route fails)
-clang -> freestanding x86-64 objects -> lld at Plan 9 load addresses -> a.out wrapper, with a syscall/ABI shim
-(SysV vs Plan 9 calling convention, TLS). More robust, but not a translator.
-
 ## Risks
 - Generated C is huge and unreadable: keep `-g` so `#line` maps back to source.
 - libc++ assumes a fairly complete POSIX libc: APE-first.
