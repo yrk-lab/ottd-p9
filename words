@@ -559,3 +559,11 @@ Next steps now (replace section 10's first two items):
   README.md (OpenTTD's), README.Plan9 (ours), mkfile: mk install (BIN default $home/bin/$cputype -> data
   $home/lib/openttd; other BIN -> /sys/lib/openttd), mk uninstall. Del key: OpenTTD's delete_windows hotkey, keep;
   the Plan 9 "interrupt" NOTE -> quit request: next.
+- INTERRUPT = QUIT (2026-11-27): sig9f.c: signal() over atnotify: "interrupt" -> SIGINT, "hangup" -> SIGHUP,
+  others (kill) default; handler inherited by rfork children (threads, helpers, libdraw slaves: slaves set the
+  flag in their own copy, harmless). sig_none.c for goken (signal moved out of os_p9). plan9_v.cpp: SIGINT handler
+  sets a flag; PollEvent -> HandleExitGameRequest (title: quit at once; game: ask). Dedicated: OpenTTD's own SIGINT
+  handler. build.rc fn stop: interrupt, wait 10 s, else kill notepg: both GUI and ded "quit on interrupt". Del key
+  in the game's window stays OpenTTD's delete_windows (game reads /dev/kbd). p9p: kill -INT quits in 1 s.
+  Queue filed: #15 thread names (ps -a, /proc/n/args), #16 music exec + wadfs, #17 cursor when not current (rio),
+  #18 survey memory from /dev/swap, #19 Phase 5 9legacy/4e (board item). pcmconv is opl3's own (49716->44100).

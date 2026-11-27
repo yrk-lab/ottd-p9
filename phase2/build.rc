@@ -67,6 +67,25 @@ fn personal {
 	bind $data/data/openttd/baseset $1/lib/openttd/baseset
 }
 
+# stop pid: Plan 9's interrupt, which the game takes as a request to
+# quit (sig9f.c: the video driver asks to quit, the dedicated server
+# quits); if it is still there after 10 seconds, the note group is
+# killed (libdraw's event processes hold /dev/mouse)
+fn stop {
+	echo interrupt >/proc/$1/note >[2]/dev/null
+	i=0
+	while(test -e /proc/$1 && test $i -lt 10){
+		sleep 1
+		i=`{echo $i + 1 | hoc}
+	}
+	if(test -e /proc/$1){
+		echo $1 did not quit on interrupt: killed
+		echo kill >/proc/$1/notepg >[2]/dev/null
+	}
+	if not
+		echo quit on interrupt
+}
+
 # play s: the Phase 1 gate scenario s (as phase1/gate.sh); the exit
 # save is gate/s.sav
 fn play {
@@ -205,9 +224,7 @@ if(test -f $out/gui/openttd.cfg){
 		} | acid $pid >$d/stack >[2=1]
 		echo video driver: broken, stack in gui/stack
 	}
-	# the note group: libdraw's event processes hold /dev/mouse
-	if(test -e /proc/$pid)
-		echo kill >/proc/$pid/notepg
+	stop $pid
 	if(~ $guirio 1)
 		slay rio | rc
 	echo kill >/proc/$plumbcat/note >[2]/dev/null
@@ -244,9 +261,7 @@ if(test -f $out/ded/openttd.cfg){
 		sleep 1
 		i=`{echo $i + 1 | hoc}
 	}
-	# the note group: libdraw's event processes hold /dev/mouse
-	if(test -e /proc/$pid)
-		echo kill >/proc/$pid/notepg
+	stop $pid
 	sleep 1
 	echo dedicated server log:
 	grep -v '^$' $d/log | tail -20

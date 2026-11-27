@@ -549,14 +549,9 @@ localtime_r(vlong *t, Ctm *c)
 }
 
 /*
- * Signals: accepted and ignored for now (notes later).
+ * Signals: signal() is sig9f.c's on 9front (notes), sig_none.c's on
+ * goken; the rest are accepted and do nothing.
  */
-
-void*
-signal(int, void*)
-{
-	return nil;	/* SIG_DFL */
-}
 
 /* the external MIDI player's: no process is ever started (execvp fails) */
 int

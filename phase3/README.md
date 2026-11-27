@@ -17,7 +17,15 @@ only. In the driver only P9Echar makes a key press: `TypeRune` maps the rune (`K
 arrow keys, Enter...) to OpenTTD's key code, adds the modifiers held, and calls `HandleKeypress`; key down and up
 only keep the modifiers and the held arrows (`KeyState`), which scroll the map. A control character (0x01 to
 0x1A, not Tab, Enter or Backspace) is Ctrl and its letter even where no keys held are told (plan9port): Ctrl+Q,
-OpenTTD's quit hotkey, asks in a game and quits at once on the title screen, as upstream (`ctrlq.input`). Esc, for example, is rune 0x1B,
+OpenTTD's quit hotkey, asks in a game and quits at once on the title screen, as upstream (`ctrlq.input`).
+
+Plan 9's interrupt (the Del key where a program reads /dev/cons, as the console and rio's text windows do, or the
+note written to /proc/n/note) is the same request. The runtime makes notes signals (`../phase0/plan9/sig9f.c`:
+`interrupt` is SIGINT, `hangup` SIGHUP; other notes, kill among them, do as always), the video driver takes SIGINT
+as a quit request (it asks in a game, quits on the title screen), and the dedicated server's own SIGINT handler
+quits it. In the game's window Del stays OpenTTD's key (close the windows): the game reads /dev/kbd, so rio passes
+it on. build.rc stops the GUI game and the dedicated server with an interrupt (killing the note group only if
+one does not quit within 10 seconds): both quit on it. With plan9port, SIGINT (Ctrl-C) does the same. Esc, for example, is rune 0x1B,
 `WKC_ESC`: in the game it cancels the tool in hand (the main toolbar's "reset_object_to_place" hotkey), in a query
 or a text box it cancels, and it closes the load/save dialog and the high scores; it does not close other windows
 (Delete does). In the load/save dialog it takes a second press, as in the stock game (checked against a Windows

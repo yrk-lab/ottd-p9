@@ -1,6 +1,6 @@
 --- src-ref/src/video/plan9_v.cpp	1970-01-01 01:00:00.000000000 +0100
 +++ src-p9/src/video/plan9_v.cpp	1970-01-01 01:00:00.000000000 +0100
-@@ -0,0 +1,354 @@
+@@ -0,0 +1,375 @@
 +/*
 + * This file is part of OpenTTD.
 + * OpenTTD is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 2.
@@ -28,6 +28,8 @@
 +#include "../framerate_type.h"
 +#include "../window_func.h"
 +#include "plan9_v.h"
++
++#include <csignal>
 +
 +#include "../safeguards.h"
 +
@@ -163,6 +165,20 @@
 +	return true;
 +}
 +
++/**
++ * Plan 9's interrupt (the Del key outside the game's window, or a note
++ * sent to it) is a quit request, as Ctrl+Q is: the runtime makes the
++ * interrupt note SIGINT (phase0/plan9/sig9f.c), and the event loop
++ * asks the game to quit (at once on the title screen, after asking in
++ * a game).
++ */
++static volatile std::sig_atomic_t _p9_interrupted = 0;
++
++static void P9Interrupt(int)
++{
++	_p9_interrupted = 1;
++}
++
 +std::optional<std::string_view> VideoDriver_Plan9::Start(const StringList &)
 +{
 +	int w, h;
@@ -178,6 +194,7 @@
 +	}
 +
 +	this->is_game_threaded = false;
++	std::signal(SIGINT, P9Interrupt);
 +	return std::nullopt;
 +}
 +
@@ -270,6 +287,10 @@
 +	static int prev_buttons;
 +	P9Event e;
 +
++	if (_p9_interrupted) {
++		_p9_interrupted = 0;
++		HandleExitGameRequest();
++	}
 +	if (p9draw_event(&e) == 0) return false;
 +
 +	switch (e.type) {
