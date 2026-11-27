@@ -6,8 +6,8 @@
 #	order).  A unit is named after its path, flat: script/api/
 #	script_map.cpp is script_api_script_map.  Only what changed is
 #	translated and compiled again; the goken build is
-#	work/tu/obj.goken/openttd (sys="goken linux" adds the Linux one,
-#	obj.linux, ../phase3/run_p9p.sh's), and 9front builds the same
+#	work/tu/obj.goken/6.openttd (sys="goken linux" adds the Linux one,
+#	obj.linux/o.openttd, ../phase3/run_p9p.sh's), and 9front builds the same
 #	tree with mk SYS=9front (run9front.sh).  The data directories are linked
 #	next to it, as for the Linux builds.
 set -uo pipefail

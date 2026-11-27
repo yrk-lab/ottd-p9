@@ -1,0 +1,64 @@
+OpenTTD for 9front (amd64)
+
+OpenTTD 15.3, translated from C++ to C and compiled with 9front's
+own compilers (https://github.com/yrk-lab/ottd-p9).  This directory
+has the game (6.openttd: a Plan 9 binary, before it is installed),
+the data it needs (lang, ai, game, media, bin, baseset, with the
+free base sets OpenGFX, OpenSFX and OpenMSX) and the licences (doc).
+
+Run it in place
+
+	cd openttd
+	./6.openttd
+
+from a rio window (the game takes the window; it may be resized),
+or on the bare screen.  The game finds its data next to the binary.
+
+Install it
+
+For yourself:
+
+	cp 6.openttd $home/bin/$cputype/openttd
+	for(d in lang ai game media bin baseset){
+		mkdir -p $home/lib/openttd/$d
+		dircp $d $home/lib/openttd/$d
+	}
+
+For everyone (as the host owner): the binary as
+/$cputype/bin/openttd and the directories in /sys/lib/openttd.
+
+Then run openttd.
+
+Where things go
+
+$home/lib/openttd is the game's own directory: its configuration
+(openttd.cfg), saved games (save), screenshots, and what it
+downloads; it is also searched for data, as /sys/lib/openttd is.
+
+Sound and music
+
+The sound goes to /dev/audio; without a sound card (no /dev/audio:
+bind -a '#A' /dev, or audio0= in plan9.ini) the game is silent.
+The music is MIDI, played with games/dmid and games/opl3 and the
+instrument bank of the Doom WAD 9front comes with
+(/sys/games/lib/doom/doom1.wad).  A different bank, a GENMIDI lump
+as a file named genmidi, can be put in a baseset directory.
+
+A server
+
+	./6.openttd -D
+
+is a dedicated server on port 3979; other OpenTTD 15.3 games (on
+any system) can join it.
+
+Notes
+
+- No threads: map generation and saving run in the game itself, and
+  it pauses for them.  No TrueType fonts: the built-in sprite font.
+- The first start asks whether to take part in the survey: there is
+  no web access here, nothing is ever sent; answer No.
+- Saves of other OpenTTD 15.x games load, compressed or not.
+
+OpenTTD is free software under the GNU General Public License,
+version 2 (doc/COPYING.md); the base sets carry their own licences
+(baseset/*/license.txt).

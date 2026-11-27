@@ -404,7 +404,7 @@
 +
 +#endif /* VIDEO_PLAN9_H */
 --- src-ref/src/video/CMakeLists.txt	2026-04-04 16:16:04.000000000 +0100
-+++ src-p9/src/video/CMakeLists.txt	2026-11-26 22:23:57.873560397 +0000
++++ src-p9/src/video/CMakeLists.txt	2026-11-27 17:09:31.117740664 +0000
 @@ -32,6 +32,12 @@
          win32_v.h
          CONDITION WIN32
@@ -413,19 +413,33 @@
 +    add_files(
 +        plan9_v.cpp
 +        plan9_v.h
-+        CONDITION OPTION_PLAN9_VIDEO
++        CONDITION OPTION_PLAN9
 +    )
  endif()
  
  add_files(
 --- src-ref/CMakeLists.txt	2026-04-04 16:16:04.000000000 +0100
-+++ src-p9/CMakeLists.txt	2026-11-26 22:23:57.873819797 +0000
++++ src-p9/CMakeLists.txt	2026-11-27 17:09:31.139418264 +0000
 @@ -182,7 +182,7 @@
  show_options()
  
  if(UNIX AND NOT APPLE AND NOT OPTION_DEDICATED)
 -    if(NOT SDL2_FOUND AND NOT ALLEGRO_FOUND)
-+    if(NOT SDL2_FOUND AND NOT ALLEGRO_FOUND AND NOT OPTION_PLAN9_VIDEO)
++    if(NOT SDL2_FOUND AND NOT ALLEGRO_FOUND AND NOT OPTION_PLAN9)
          message(FATAL_ERROR "SDL2 or Allegro is required for this platform")
      endif()
      if(HARFBUZZ_FOUND AND NOT ICU_i18n_FOUND)
+@@ -409,6 +409,13 @@
+     target_link_libraries(openttd WASM::WASM)
+ endif()
+ 
++if(OPTION_PLAN9)
++    # Plan 9: the drivers (video, sound, music), and no XDG paths: the
++    # personal directory ($home/lib/openttd, PERSONAL_DIR) has the
++    # configuration too
++    add_definitions(-DWITH_PLAN9)
++endif()
++
+ if(NOT PERSONAL_DIR STREQUAL "(not set)")
+     add_definitions(
+         -DWITH_PERSONAL_DIR

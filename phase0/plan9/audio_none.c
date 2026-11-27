@@ -31,9 +31,10 @@ p9audio_close(void)
 }
 
 int
-p9music_play(char *file, int rate)
+p9music_play(char *file, char *bank, int rate)
 {
 	(void)file;
+	(void)bank;
 	(void)rate;
 	return -1;
 }

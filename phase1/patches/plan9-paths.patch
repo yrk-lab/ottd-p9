@@ -1,0 +1,11 @@
+--- src-ref/src/stdafx.h	2026-04-04 16:16:04.000000000 +0100
++++ src-p9/src/stdafx.h	2026-11-27 17:09:31.140426564 +0000
+@@ -241,7 +241,7 @@
+ #endif
+ 
+ /* Define the the platforms that use XDG */
+-#if defined(WITH_PERSONAL_DIR) && defined(UNIX) && !defined(__APPLE__) && !defined(__EMSCRIPTEN__)
++#if defined(WITH_PERSONAL_DIR) && defined(UNIX) && !defined(__APPLE__) && !defined(__EMSCRIPTEN__) && !defined(WITH_PLAN9)
+ #	define USE_XDG
+ #endif
+ 

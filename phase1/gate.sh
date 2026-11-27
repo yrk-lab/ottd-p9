@@ -31,8 +31,11 @@ play()
 {
 	local s=$1 d=$out/$name/$1
 	rm -rf "$d"
-	mkdir -p "$d/data/openttd" "$d/config"
+	mkdir -p "$d/data/openttd" "$d/config" "$d/lib"
 	ln -s "$data/openttd/baseset" "$d/data/openttd/baseset"
+	# the Plan 9 builds' data is $HOME/lib/openttd, the stock build's
+	# XDG_DATA_HOME/openttd: one directory
+	ln -s ../data/openttd "$d/lib/openttd"
 	cat >"$d/openttd.cfg" <<-EOF
 	[misc]
 	savegame_format = none
@@ -54,7 +57,7 @@ play()
 		game=(-g "$work/regression.sav") ;;
 	esac
 
-	XDG_DATA_HOME=$d/data XDG_CONFIG_HOME=$d/config \
+	HOME=$d XDG_DATA_HOME=$d/data XDG_CONFIG_HOME=$d/config \
 	timeout 1800 "$bin" -x -c "$d/openttd.cfg" -v "null:ticks=$ticks" -s null -m null "${game[@]}" \
 		>"$d/log" 2>&1
 	local st=$?

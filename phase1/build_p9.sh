@@ -11,6 +11,10 @@
 #	No threads: nothreads.c makes pthread_create fail, so OpenTTD's
 #	StartNewThread falls back to running the work inline, as it will
 #	on Plan 9.
+#	Plan 9's paths: the personal directory (configuration, saves,
+#	downloads, data) is $home/lib/openttd, the installed data
+#	/sys/lib/openttd; no XDG directories (WITH_PLAN9).  The tests set
+#	HOME (home on Plan 9) to a directory of their own.
 #	No SSE (Plan 9 compilers have no vector types): the blitters are
 #	not part of the simulation.  compile_commands.json is exported for
 #	translate.sh, which recompiles every unit to LLVM IR.
@@ -34,7 +38,9 @@ cmake -S "$p9" -B "$b" -G Ninja -Wno-dev \
 	-DCMAKE_CXX_FLAGS="-stdlib=libc++" \
 	-DCMAKE_EXE_LINKER_FLAGS="-stdlib=libc++ $work/nothreads.o $work/draw_none.o $work/audio_none.o" \
 	-DOPTION_DEDICATED=OFF \
-	-DOPTION_PLAN9_VIDEO=ON \
+	-DOPTION_PLAN9=ON \
+	-DPERSONAL_DIR=lib/openttd \
+	-DGLOBAL_DIR=/sys/lib/openttd \
 	-DCMAKE_DISABLE_FIND_PACKAGE_Freetype=ON \
 	-DCMAKE_DISABLE_FIND_PACKAGE_Fontconfig=ON \
 	-DCMAKE_DISABLE_FIND_PACKAGE_Harfbuzz=ON \

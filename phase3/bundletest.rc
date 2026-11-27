@@ -1,0 +1,48 @@
+#!/bin/rc
+# the bundle, unpacked and run as its README says, in a fresh home;
+# /tmp in memory for this namespace (the root is the host's, over
+# u9fs); logs and screenshots in $w, where the host sees them
+rfork en
+ramfs
+w=/n/ottd/phase3/work
+t=/tmp/bt
+mkdir -p $t/home1 $t/home2/bin/amd64
+6c -o /tmp/screenshot.6 /n/ottd/phase3/screenshot.c && 6l -o /tmp/screenshot /tmp/screenshot.6
+cd $t
+gunzip <$w/openttd-plan9.tgz | tar x
+echo unpacked: `{ls $t/openttd}
+
+# play name home cmd...: the game for 40 s, a screenshot at 35 s
+fn play {
+	n=$1
+	h=$2
+	shift 2
+	{ home=$h $* >$w/bundle-$n.log >[2=1] } &
+	pid=$apid
+	sleep 30
+	echo $n: dmid `{ps | grep -c ' dmid$'} bank `{ls /tmp/openttd.genmidi >[2]/dev/null}
+	sleep 5
+	/tmp/screenshot | topng >$w/bundle-$n.png
+	echo $n: config `{ls $h/lib/openttd/openttd.cfg >[2=1]}
+	# the whole note group: libdraw's event processes (mouse,
+	# keyboard) are processes of their own, which a quit stops
+	if(test -e /proc/$pid)
+		echo kill >/proc/$pid/notepg
+	slay dmid opl3 | rc
+	sleep 2
+}
+
+# run in place
+cd $t/openttd
+play inplace $t/home1 ./6.openttd
+
+# installed for the user, run from elsewhere
+home=$t/home2
+cp $t/openttd/6.openttd $home/bin/amd64/openttd
+for(d in lang ai game media bin baseset){
+	mkdir -p $home/lib/openttd/$d
+	dircp $t/openttd/$d $home/lib/openttd/$d
+}
+cd /
+play installed $home $home/bin/amd64/openttd
+echo done

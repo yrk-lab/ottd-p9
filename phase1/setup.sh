@@ -47,26 +47,6 @@ for set in opensfx:$opensfx openmsx:$openmsx; do
 	mv "$data/openttd/baseset/$n-$v" "$data/openttd/baseset/$n"
 done
 
-# the instrument bank for 9front's MIDI player (games/dmid): Freedoom's
-# GENMIDI lump (BSD licence), from its WAD
-if [ ! -f "$data/genmidi" ]; then
-	curl -fsSL -o "$work/freedoom.zip" \
-		"https://github.com/freedoom/freedoom/releases/download/v$freedoom/freedoom-$freedoom.zip"
-	unzip -q -o -j "$work/freedoom.zip" "freedoom-$freedoom/freedoom2.wad" -d "$work/freedoom"
-	python3 - "$work/freedoom/freedoom2.wad" "$data/genmidi" <<'PY'
-import struct, sys
-w = open(sys.argv[1], "rb").read()
-n, off = struct.unpack("<ii", w[4:12])
-for i in range(n):
-	o, s, name = struct.unpack("<ii8s", w[off + 16*i:off + 16*i + 16])
-	if name.rstrip(b"\0") == b"GENMIDI":
-		open(sys.argv[2], "wb").write(w[o:o + s])
-		break
-else:
-	sys.exit("no GENMIDI in " + sys.argv[1])
-PY
-fi
-
 if [ ! -d "$data/openttd/baseset/opengfx" ]; then
 	mkdir -p "$data/openttd/baseset"
 	curl -fsSL -o "$work/opengfx.zip" "https://cdn.openttd.org/opengfx-releases/$opengfx/opengfx-$opengfx-all.zip"

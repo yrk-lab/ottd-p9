@@ -15,8 +15,12 @@ int	p9audio_space(void);
 void	p9audio_write(short *buf, int frames);
 void	p9audio_close(void);
 
-/* music: play a standard MIDI file; whether it still plays; its next frames (the rest silence) */
-int	p9music_play(char *file, int rate);
+/*
+ * music: play a standard MIDI file, with the instrument bank given ("":
+ * the system's); whether it still plays; its next frames (the rest
+ * silence)
+ */
+int	p9music_play(char *file, char *bank, int rate);
 void	p9music_stop(void);
 int	p9music_playing(void);
 int	p9music_read(short *buf, int frames);

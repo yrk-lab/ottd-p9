@@ -1,3 +1,4 @@
 # OpenTTD patches for the Plan 9 build, applied in order by prep.sh
 plan9-video.patch
 plan9-audio.patch
+plan9-paths.patch

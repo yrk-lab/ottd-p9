@@ -93,7 +93,7 @@
 +
 +#endif /* SOUND_PLAN9_H */
 --- src-ref/src/sound/CMakeLists.txt	2026-04-04 16:16:04.000000000 +0100
-+++ src-p9/src/sound/CMakeLists.txt	2026-11-27 16:09:05.448045468 +0000
++++ src-p9/src/sound/CMakeLists.txt	2026-11-27 17:09:31.118586664 +0000
 @@ -35,3 +35,9 @@
      null_s.cpp
      null_s.h
@@ -102,11 +102,11 @@
 +add_files(
 +    plan9_s.cpp
 +    plan9_s.h
-+    CONDITION OPTION_PLAN9_VIDEO
++    CONDITION OPTION_PLAN9
 +)
 --- src-ref/src/music/plan9_m.cpp	1970-01-01 01:00:00.000000000 +0100
 +++ src-p9/src/music/plan9_m.cpp	1970-01-01 01:00:00.000000000 +0100
-@@ -0,0 +1,87 @@
+@@ -0,0 +1,91 @@
 +/*
 + * This file is part of OpenTTD.
 + * OpenTTD is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 2.
@@ -120,20 +120,23 @@
 + * The song, as a standard MIDI file, is played by an external pipeline
 + * (on 9front, games/dmid into games/opl3: phase0/plan9/audio9f.c), whose
 + * sound the mixer takes as its music source, so the music goes out with
-+ * the sound effects through the Plan 9 sound driver.
++ * the sound effects through the Plan 9 sound driver.  dmid's instrument
++ * bank is a file "genmidi" in the base set directories, as the game
++ * finds its other data, else 9front's own (in its shareware Doom WAD).
 + */
 +
 +#include "../stdafx.h"
 +#include "../mixer.h"
 +#include "../debug.h"
 +#include "../base_media_base.h"
++#include "../fileio_func.h"
 +#include "midifile.hpp"
 +#include "plan9_m.h"
 +
 +#include "../safeguards.h"
 +
 +extern "C" {
-+	int p9music_play(char *file, int rate);
++	int p9music_play(char *file, char *bank, int rate);
 +	void p9music_stop(void);
 +	int p9music_playing(void);
 +	int p9music_read(short *buf, int frames);
@@ -175,7 +178,8 @@
 +	std::string filename = MidiFile::GetSMFFile(song);
 +	p9music_stop();
 +	if (filename.empty()) return;
-+	if (p9music_play(filename.data(), static_cast<int>(_p9_music_rate)) < 0) {
++	std::string bank = FioFindFullPath(BASESET_DIR, "genmidi");
++	if (p9music_play(filename.data(), bank.data(), static_cast<int>(_p9_music_rate)) < 0) {
 +		Debug(driver, 1, "plan9: cannot play {}", filename);
 +	}
 +}
@@ -232,7 +236,7 @@
 +
 +#endif /* MUSIC_PLAN9_H */
 --- src-ref/src/music/CMakeLists.txt	2026-04-04 16:16:04.000000000 +0100
-+++ src-p9/src/music/CMakeLists.txt	2026-11-27 16:09:05.449454068 +0000
++++ src-p9/src/music/CMakeLists.txt	2026-11-27 17:09:31.119196964 +0000
 @@ -49,3 +49,9 @@
      null_m.cpp
      null_m.h
@@ -241,5 +245,5 @@
 +add_files(
 +    plan9_m.cpp
 +    plan9_m.h
-+    CONDITION OPTION_PLAN9_VIDEO
++    CONDITION OPTION_PLAN9
 +)

@@ -142,5 +142,6 @@ for s in ${sys:-goken}; do
 		grep -v '^warning' "mk.$s.log" | cut -c1-300 | tail -20
 		fatal "compilation for $s failed"
 	}
-	echo "built $dir/obj.$s/$targ"
+	O=$(sed -n 's/^O=//p' "config.$s")
+	echo "built $dir/obj.$s/$O.$targ"
 done

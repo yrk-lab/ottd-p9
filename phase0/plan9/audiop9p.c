@@ -69,7 +69,7 @@ p9audio_close(void)
 }
 
 int
-p9music_play(char*, int)
+p9music_play(char*, char*, int)
 {
 	return -1;
 }

@@ -89,3 +89,21 @@ The second gives QEMU an Intel HDA card (9front's pc64 kernel has HDA, not AC97;
 line) whose output QEMU records, `../phase2/work/9front-audio.wav`: the music and the game's sounds, continuous.
 While it plays, `./vmsh ps` shows the game's audio writer in Pwrite on /dev/audio and dmid and opl3 waiting on
 a full pipe.
+
+## Names, paths, the bundle
+
+The programs are named as Plan 9 names a binary until it is installed: `6.openttd` (kencc, goken and 9front),
+`o.openttd` (gcc: the Linux build of the fast loop, as plan9port's `o.` prefix). The game keeps Plan 9's paths
+(`../phase1/patches/plan9-paths.patch`, build_p9.sh): its own directory, configuration, saves and downloads
+included, is `$home/lib/openttd`, and installed data is searched in `/sys/lib/openttd`; no XDG directories. The
+tests give each run a home of its own (`HOME` on Linux, `home` on 9front).
+
+dmid's instrument bank: 9front comes with one, the GENMIDI lump of its shareware Doom WAD
+(`/sys/games/lib/doom/doom1.wad`), which the shim copies out once; a file `genmidi` in a base set directory
+takes its place, found the way the game finds its other data. Nothing to set.
+
+`bundle.sh` makes `work/openttd-plan9.tgz`: `openttd/` with `6.openttd`, the data it finds next to it, the
+licences and README (`bundle.README`: run in place, or install as `$home/bin/$cputype/openttd` with the data in
+`$home/lib/openttd`). Both were checked on 9front from the unpacked bundle with a fresh home (`bundletest.rc`,
+run in the VM through vmsh): the title game, music with 9front's bank. A test must stop the game by its note group
+(`/proc/n/notepg`): libdraw's event processes hold /dev/mouse, and a second game could not open it.

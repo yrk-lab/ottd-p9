@@ -522,3 +522,15 @@ Next steps now (replace section 10's first two items):
   hda-output,audiodev=snd0 + -audiodev wav,path=...; boot line audio0=type=hda; termrc.local bind -a '#A' /dev.
   QEMU's wav backend writes its header at exit (shut the VM down before reading). Recorded 40 s, music+sound.
   Gotcha again: editing run9front.sh while a run executes it (bash reads incrementally) - don't.
+- NAMES/PATHS/BUNDLE (2026-11-27): binaries $O.$TARG (6.openttd, o.openttd) via mkgen; OPTION_PLAN9 (renamed from
+  OPTION_PLAN9_VIDEO) defines WITH_PLAN9 -> no USE_XDG (plan9-paths.patch on stdafx.h); build_p9 -DPERSONAL_DIR=
+  lib/openttd -DGLOBAL_DIR=/sys/lib/openttd (global defines: one full rebuild). Tests: gate.sh HOME=$d + $d/lib/
+  openttd -> ../data/openttd symlink (ref uses XDG, p9 builds HOME); build.rc home=$d, baseset bound into
+  $d/lib/openttd. With -c, the personal dir is the config file's dir anyway (saves in $d/save).
+  GENMIDI: 9front ships /sys/games/lib/doom/doom1.wad (shareware) with a GENMIDI lump -> audio9f.c extracts it to
+  /tmp/openttd.genmidi; driver passes FioFindFullPath(BASESET_DIR,"genmidi") first. Freedoom dropped.
+  bundle.sh -> phase3/work/openttd-plan9.tgz (33 MB, ustar, gzip; 9front tar has z). README: dircp needs the
+  target dir (mkdir -p first). Test lessons: VM /tmp is the u9fs root (slow): `ramfs` in the test's own namespace
+  (user tip; hidden from other namespaces, so logs go to /n/ottd); run detached (`... &` via vmsh) and poll a file;
+  KILL THE NOTE GROUP (notepg): libdraw event slaves keep /dev/mouse open otherwise ("einit: can't open mouse:
+  in use"). Plan 9 tr has no \n escape. OpenTTD writes openttd.cfg only on clean exit.

@@ -55,15 +55,16 @@ for(d in lang ai game baseset media bin){
 	mkdir -p $o/$d
 	bind $data/build-p9/$d $o/$d
 }
-$o/openttd -h >$out/h.txt >[2=1]
+$o/6.openttd -h >$out/h.txt >[2=1]
 echo openttd -h status $status
 sed 3q $out/h.txt
 
-# a fresh personal directory d with the gate's base set and config
+# a fresh home d with the gate's base set: the game's data and
+# personal directory is $home/lib/openttd
 fn personal {
 	rm -rf $1
-	mkdir -p $1/data/openttd/baseset $1/config
-	bind $data/data/openttd/baseset $1/data/openttd/baseset
+	mkdir -p $1/lib/openttd/baseset
+	bind $data/data/openttd/baseset $1/lib/openttd/baseset
 }
 
 # play s: the Phase 1 gate scenario s (as phase1/gate.sh); the exit
@@ -90,7 +91,7 @@ fn play {
 	case regression
 		game=(-g $data/regression.sav)
 	}
-	XDG_DATA_HOME=$d/data XDG_CONFIG_HOME=$d/config $o/openttd -x -c $d/openttd.cfg \
+	home=$d $o/6.openttd -x -c $d/openttd.cfg \
 		-v null:ticks^'='^$ticks -s null -m null $game >$d/log >[2=1]
 	st=$status
 	if(test -f $d/save/autosave/exit.sav){
@@ -133,12 +134,11 @@ if(test -f $out/gui/openttd.cfg){
 	# does); the ready file where the host sees it
 	rm -f /tmp/shot.* /tmp/screen.*
 	# with $guiaudio 1, the Plan 9 sound and music drivers (/dev/audio;
-	# music by games/dmid with the GENMIDI bank setup.sh fetched)
+	# music by games/dmid, with 9front's instrument bank)
 	audio=(-s null -m null)
 	if(~ $guiaudio 1)
 		audio=(-s plan9 -m plan9)
-	p9genmidi=$data/data/genmidi
-	cmd=($o/openttd -x -c $d/openttd.cfg -v plan9 $audio -d driver^'='^3)
+	cmd=($o/6.openttd -x -c $d/openttd.cfg -v plan9 $audio -d driver^'='^3)
 	if(~ $guirio 1){
 		# in a rio window, as one runs it: rio's -i script opens the
 		# window; with $guiresize, a process finds it in wsys by its
@@ -147,8 +147,8 @@ if(test -f $out/gui/openttd.cfg){
 		{
 			echo '#!/bin/rc'
 			# quoted: a word with = in it is an assignment or an error to rc
-			echo 'XDG_DATA_HOME='$d/data' XDG_CONFIG_HOME='$d/config' p9drawshot=/tmp/shot p9drawshotat=100000' \
-				$o/openttd -x -c $d/openttd.cfg -v plan9 $audio -d '''driver=3''' '>'$d/log '>[2=1]'
+			echo 'home='$d' p9drawshot=/tmp/shot p9drawshotat=100000' \
+				$o/6.openttd -x -c $d/openttd.cfg -v plan9 $audio -d '''driver=3''' '>'$d/log '>[2=1]'
 		} >/tmp/game
 		{
 			echo '#!/bin/rc'
@@ -169,12 +169,12 @@ if(test -f $out/gui/openttd.cfg){
 		i=0
 		while(~ $#pid 0 && test $i -lt 120){
 			sleep 1
-			pid=`{ps | grep ' openttd$' | awk '{print $2}' | sed 1q}
+			pid=`{ps | grep ' 6\.openttd$' | awk '{print $2}' | sed 1q}
 			i=`{echo $i + 1 | hoc}
 		}
 	}
 	if not{
-		XDG_DATA_HOME=$d/data XDG_CONFIG_HOME=$d/config p9drawshot=/tmp/shot p9drawshotat=100000 \
+		home=$d p9drawshot=/tmp/shot p9drawshotat=100000 \
 			$cmd >$d/log >[2=1] &
 		pid=$apid
 	}
@@ -199,8 +199,9 @@ if(test -f $out/gui/openttd.cfg){
 		} | acid $pid >$d/stack >[2=1]
 		echo video driver: broken, stack in gui/stack
 	}
+	# the note group: libdraw's event processes hold /dev/mouse
 	if(test -e /proc/$pid)
-		echo kill >/proc/$pid/note
+		echo kill >/proc/$pid/notepg
 	if(~ $guirio 1)
 		slay rio | rc
 	sleep 1
@@ -220,7 +221,7 @@ if(test -f $out/ded/openttd.cfg){
 	cp $d/openttd.cfg /tmp/ded.cfg
 	personal $d
 	mv /tmp/ded.cfg $d/openttd.cfg
-	XDG_DATA_HOME=$d/data XDG_CONFIG_HOME=$d/config $o/openttd -D -x -c $d/openttd.cfg \
+	home=$d $o/6.openttd -D -x -c $d/openttd.cfg \
 		-d net^'='^$netdebug >$d/log >[2=1] &
 	pid=$apid
 	# rc has no break: count in the condition
@@ -236,8 +237,9 @@ if(test -f $out/ded/openttd.cfg){
 		sleep 1
 		i=`{echo $i + 1 | hoc}
 	}
+	# the note group: libdraw's event processes hold /dev/mouse
 	if(test -e /proc/$pid)
-		echo kill >/proc/$pid/note
+		echo kill >/proc/$pid/notepg
 	sleep 1
 	echo dedicated server log:
 	grep -v '^$' $d/log | tail -20
