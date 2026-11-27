@@ -6,9 +6,10 @@
  * keyboard is the system part: kbd9f.c on 9front, kbdp9p.c on
  * plan9port.  See p9draw.h.
  *
- * For tests: with $p9drawshot set to a file name, the window as shown
- * is read back after $p9drawshotat flushes (default 300) and written
- * there as a PPM.
+ * For tests: with $p9drawshot set to a path prefix, the shim writes
+ * prefix.ready when the window is up, and the window as shown, read
+ * back, as prefix.t.ppm at each t of $p9drawshotat (seconds after
+ * that, a list; default 20).
  */
 #include <u.h>
 #include <libc.h>
@@ -17,13 +18,20 @@
 #include <event.h>
 #include "p9draw.h"
 
+enum
+{
+	Nshot	= 16,
+};
+
 static Image	*img;		/* the game's screen, window-sized */
 static int	resized;
 static int	gone;
 static Cursor	blank;
 static char	*shot;		/* $p9drawshot */
-static int	shotat;
-static int	nflush;
+static int	shotat[Nshot];	/* $p9drawshotat, ascending */
+static int	nshot;
+static int	shotnext;
+static vlong	t0;		/* when the window was up */
 
 void
 eresized(int new)
@@ -44,24 +52,40 @@ newimage(void)
 	return img != nil ? 0 : -1;
 }
 
+static void
+shotinit(void)
+{
+	char *s, *f[Nshot], buf[256];
+	int i, fd;
+
+	shot = getenv("p9drawshot");
+	if(shot == nil)
+		return;
+	s = getenv("p9drawshotat");
+	nshot = s != nil ? tokenize(s, f, Nshot) : 0;
+	for(i = 0; i < nshot; i++)
+		shotat[i] = atoi(f[i]);
+	free(s);
+	if(nshot == 0)
+		shotat[nshot++] = 20;
+	t0 = nsec();
+	snprint(buf, sizeof buf, "%s.ready", shot);
+	fd = create(buf, OWRITE, 0644);
+	if(fd >= 0)
+		close(fd);
+}
+
 int
 p9draw_init(char *label, int *w, int *h)
 {
-	char *s;
-
 	if(initdraw(nil, nil, label) < 0)
 		return -1;
 	einit(Emouse | kbdevents());
 	kbdinit();
 	esetcursor(&blank);
-	shot = getenv("p9drawshot");
-	if(shot != nil){
-		s = getenv("p9drawshotat");
-		shotat = s != nil ? atoi(s) : 300;
-		free(s);
-	}
 	if(newimage() < 0)
 		return -1;
+	shotinit();
 	*w = Dx(screen->r);
 	*h = Dy(screen->r);
 	return 0;
@@ -78,12 +102,13 @@ p9draw_exit(void)
 
 /* the window as shown, as a PPM */
 static void
-writeshot(void)
+writeshot(int at)
 {
 	Rectangle r;
 	uchar *b, *p, *q, c;
 	int w, h, n, fd, i;
 	Image *t;
+	char name[256];
 
 	r = screen->r;
 	w = Dx(r);
@@ -108,7 +133,8 @@ writeshot(void)
 		q[2] = c;
 	}
 	/* a write to a file server may be short (u9fs): write it all */
-	fd = create(shot, OWRITE, 0644);
+	snprint(name, sizeof name, "%s.%d.ppm", shot, at);
+	fd = create(name, OWRITE, 0644);
 	if(fd >= 0){
 		fprint(fd, "P6\n%d %d\n255\n", w, h);
 		for(p = b, n = w*h*3; n > 0; p += i, n -= i)
@@ -136,8 +162,8 @@ p9draw_flush(u32int *buf, int pitch, int x, int y, int w, int h)
 	r = Rect(x, y, x + w, y + h);
 	draw(screen, rectaddpt(r, screen->r.min), img, nil, r.min);
 	flushimage(display, 1);
-	if(shot != nil && ++nflush == shotat)
-		writeshot();
+	if(shot != nil && shotnext < nshot && nsec() - t0 >= shotat[shotnext]*1000000000LL)
+		writeshot(shotat[shotnext++]);
 }
 
 int

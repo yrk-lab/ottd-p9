@@ -17,7 +17,14 @@
 #	  ../phase1/out/9front and are compared with the translated Linux
 #	  build's (tr);
 #	- with gui=1, the Plan 9 video driver on the bare screen (VGA, no
-#	  rio) for $guitime seconds: its screenshot is work/9front-screen.png;
+#	  rio) for $guitime seconds (default 120): the screen (topng) is
+#	  work/9front-screen.t.png $guishots seconds after the draw shim's
+#	  window is up (default 20).  With guiinput=script, input is
+#	  sent through QEMU's monitor once the window is up, a line
+#	  "seconds command" at a time: "at x y" moves the mouse to x y
+#	  (PS/2 is relative: to the corner first, then in small steps),
+#	  "click" presses and releases the left button, anything else
+#	  goes to the monitor (sendkey right 2000; sendkey grave_accent);
 #	- a dedicated server: once it is up, the stock Linux build joins
 #	  it as a client through QEMU's port forward (host port 13979)
 #	  for $clienttime seconds (default 60); the server must report the
@@ -82,7 +89,7 @@ if(~ $p9test ottd){
 	echo reboot >/dev/reboot
 }
 RC
-sed -i "s/TICKS/${ticks:-100000}/; s/GUITIME/${guitime:-120}/; s/GUISHOTS/${guishots:-200}/" "$root/rc/bin/termrc.local"
+sed -i "s/TICKS/${ticks:-100000}/; s/GUITIME/${guitime:-120}/; s/GUISHOTS/${guishots:-20}/" "$root/rc/bin/termrc.local"
 
 accel=
 wrap=
@@ -110,8 +117,65 @@ $wrap timeout ${timeout:-7200} qemu-system-x86_64 $accel -m 4G -smp 2 -nographic
 	-append "nobootprompt=tcp fs=$fs auth=$fs console=0 b115200 user=glenda p9test=ottd vgasize=1024x768x32 monitor=vesa mouseport=ps2" \
 	-netdev "user,id=net0,guestfwd=tcp:$fs:564-cmd:$u9fs,guestfwd=tcp:$fs:565-cmd:$u9repo,$fwd" \
 	-device e1000,netdev=net0 \
+	-monitor "unix:$here/work/qemu.mon,server=on,wait=off" \
 	>"$here/work/9front-console.log" 2>&1 &
 qemu=$!
+
+# the monitor: mon command...
+mon()
+{
+	echo "$*" | socat - "UNIX-CONNECT:$here/work/qemu.mon" >/dev/null 2>&1
+}
+
+# the mouse, relative, by steps of at most 10: move dx dy
+move()
+{
+	local dx=$1 dy=$2 sx sy
+	while [ $dx -ne 0 ] || [ $dy -ne 0 ]; do
+		sx=$(( dx > 10 ? 10 : (dx < -10 ? -10 : dx) ))
+		sy=$(( dy > 10 ? 10 : (dy < -10 ? -10 : dy) ))
+		mon mouse_move $sx $sy
+		dx=$((dx - sx))
+		dy=$((dy - sy))
+	done
+}
+
+# play the input script, timed from the draw shim's window
+play()
+{
+	local start now t cmd
+	while kill -0 $qemu 2>/dev/null && [ ! -f "$f9/gui/shot.ready" ]; do
+		sleep 1
+	done
+	start=$(date +%s.%N)
+	while read -r t cmd; do
+		case $t in ''|'#'*) continue ;; esac
+		now=$(date +%s.%N)
+		sleep "$(echo "$start + $t - $now" | bc | sed 's/^-.*/0/')"
+		echo "$t: $cmd"
+		set -- $cmd
+		case $1 in
+		at)
+			move -2000 -2000
+			move $2 $3
+			;;
+		click)
+			mon mouse_button 1
+			sleep 0.2
+			mon mouse_button 0
+			;;
+		*)
+			mon "$cmd"
+			;;
+		esac
+	done <"$guiinput"
+}
+player=
+if [ -n "${gui:-}" ] && [ -n "${guiinput:-}" ]; then
+	guiinput=$(realpath "$guiinput")
+	play >"$here/work/input.log" 2>&1 &
+	player=$!
+fi
 
 # the client, once the server is up
 client=
@@ -132,6 +196,7 @@ if [ -f "$f9/ded/ready" ]; then
 	touch "$f9/ded/done"
 fi
 wait $qemu
+[ -z "$player" ] || kill $player 2>/dev/null
 
 [ -f "$f9/results.txt" ] || fatal "no results; console log in $here/work/9front-console.log"
 cat "$f9/results.txt"
@@ -161,12 +226,19 @@ done
 
 if [ -n "${gui:-}" ]; then
 	echo "== video driver"
-	if [ -f "$f9/gui/shot.ppm" ]; then
-		python3 "$repo/phase3/ppm2png.py" "$f9/gui/shot.ppm" "$here/work/9front-screen.png" &&
-			echo "screenshot: $here/work/9front-screen.png"
+	rm -f "$here"/work/9front-screen*.png
+	if ls "$f9"/gui/screen.*.png >/dev/null 2>&1; then
+		for f in "$f9"/gui/screen.*.png; do
+			t=${f%.png}
+			t=${t##*.}
+			cp "$f" "$here/work/9front-screen.$t.png" &&
+				echo "screenshot: $here/work/9front-screen.$t.png"
+		done
+		python3 "$repo/phase3/sheet.py" "$here/work/9front-screens.png" "$here"/work/9front-screen.*.png 2>/dev/null &&
+			echo "all: $here/work/9front-screens.png"
 	else
 		echo "no screenshot"
-		tail -10 "$f9"/gui/log.* 2>/dev/null
+		tail -10 "$f9/gui/log" 2>/dev/null
 		fail=1
 	fi
 fi

@@ -469,3 +469,14 @@ Next steps now (replace section 10's first two items):
   * u9fs short writes: write loops needed (writeshot); rc can't take env assignments from a list variable.
   * OPEN: dedicated-server join intermittently dropped ("took longer than 500 ticks to join", client ACKs
     not seen by the server) - 2 of 4 runs; suspect net9f receive path. Issue filed.
+- PHASE 3 INPUT VERIFIED (2026-11-27). p9p: phase3/run_p9p.sh input=newgame.input (xdotool; installed
+  xdotool, x11-utils, python3-pil with sudo apt, user said "install what you need"); WSLg window 1215x810.
+  9front: run9front.sh guiinput=../phase3/newgame9f.input via QEMU -monitor unix socket (socat): PS/2 relative
+  mouse -> "at x y" = move -2000,-2000 then steps of 10 (no accel seen: positions land exactly);
+  sendkey right 2000 = held key -> scrolls (kbd9f up/down works). Screenshots: user suggested topng </dev/screen,
+  but without rio there is no /dev/screen (rio serves it) -> phase3/screenshot.c: initdisplay (NOT initdraw:
+  on a bare screen initdraw allocates a white full-screen window over the game) + writeimage(display->image)
+  | topng; timed by build.rc from the shim's ready file. The shim's own shots (in flush) lag badly on 9front
+  (game stalls in world gen; 2 MB over u9fs) - 9front uses the external tool; shim shots remain for p9p.
+  9front shows the kernel console screen until the game's first paint (~title load failing, ~25 s).
+  Dedicated-server join failed again in these runs (#7): now 4 of 7.

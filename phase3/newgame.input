@@ -1,0 +1,10 @@
+# the main menu: no survey, New Game, Generate (window 1215x810, as
+# WSLg opens it), then the keyboard: scroll with the arrows, the
+# console with the backquote, a command typed into it
+18 mousemove --window %w 532 458 click 1
+22 mousemove --window %w 586 226 click 1
+26 mousemove --window %w 606 578 click 1
+45 key --window %w --delay 100 Right Right Right Right Right Right Right Right Right Right
+50 key --window %w grave
+53 type --window %w --delay 80 help
+56 key --window %w Return

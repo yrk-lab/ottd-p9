@@ -88,6 +88,10 @@ comes with libc++abi's typeinfo code, which the exception runtime needs anyway.
 3. **Video driver.** `src/video/plan9_v.cpp` (translated C++) + small hand-written C shim on libdraw (initdraw, loadimage,
    mouse/keyboard, eresized). Start as split processes (game under APE, native frontend over a pipe), merge later if wanted.
    Built-in sprite font, null sound, 32bpp-optimized blitter, OpenGFX base set.
+   **Status 2026-11-27:** the driver plays on 9front's bare screen and with plan9port: menus, new game, world
+   generation, the running game, mouse and keyboard (held keys on 9front), checked by scripted input (QEMU's
+   monitor on 9front, xdotool on Linux) and timed screenshots (`phase3/README.md`). The shim stayed in the same
+   process (libdraw is native C linked with the translated game; no split process was needed).
 4. **Upstream-tracking CI.** Script bumps the tag, regenerates C, builds, reruns the Phase 1 savegame check.
 
 ## Phase 0.5: Plan 9 compiler acceptance (added after research; gate before Phase 1)

@@ -11,10 +11,11 @@
 #	- plays the Phase 1 gate scenarios for $ticks ticks (default
 #	  100000): 9f/gate/world.sav, 9f/gate/regression.sav;
 #	- with 9f/gui/openttd.cfg, runs the game with the Plan 9 video
-#	  driver on the screen for $guitime seconds (default 120), once
-#	  for each frame number in $guishots (default 200), the draw shim
-#	  writing a screenshot to 9f/gui/shot.ppm at that frame (0: none);
-#	  a run that faults leaves its stack in 9f/gui/stack.n;
+#	  driver on the screen for $guitime seconds (default 120), the
+#	  draw shim saying when it is up (9f/gui/shot.ready), and the
+#	  screen (topng) 9f/gui/screen.t.png t seconds after, for each t
+#	  in $guishots;
+#	  a run that faults leaves its stack in 9f/gui/stack;
 #	- with 9f/ded/openttd.cfg, starts a dedicated server (port 3979),
 #	  says so in 9f/ded/ready, and stops it when the host's client is
 #	  done (9f/ded/done) or after $dedtime seconds (default 600).
@@ -110,22 +111,40 @@ for(s in world regression)
 	play $s
 date
 
-# the video driver, on the screen: one run per frame number in
-# $guishots (default 200), the draw shim writing its screenshot at that
-# frame (0: none), each for $guitime seconds (default 120)
-fn guirun {
-	n=$1
-	# the shim's environment: rc takes no assignments from a list
-	p9drawshot=()
-	p9drawshotat=()
-	if(! ~ $n 0){
-		p9drawshot=$d/shot.ppm
-		p9drawshotat=$n
-	}
-	XDG_DATA_HOME=$d/data XDG_CONFIG_HOME=$d/config \
-		$o/openttd -x -c $d/openttd.cfg -v plan9 -s null -m null -d driver^'='^3 >$d/log.$n >[2=1] &
+# the video driver, on the screen, for $guitime seconds (default 120):
+# gui/shot.ready says the draw shim's window is up (run9front.sh sends
+# its input from then), and gui/screen.t.png is the screen t seconds
+# after, for each t in $guishots (default 20)
+if(test -f $out/gui/openttd.cfg){
+	d=$out/gui
+	if(~ $#guitime 0)
+		guitime=120
+	if(~ $#guishots 0)
+		guishots=20
+	# no rio, no /dev/screen: ../phase3/screenshot.c reads the screen
+	6c -o /tmp/screenshot.6 $r/phase3/screenshot.c && 6l -o /tmp/screenshot /tmp/screenshot.6
+	cp $d/openttd.cfg /tmp/gui.cfg
+	personal $d
+	mv /tmp/gui.cfg $d/openttd.cfg
+	# one word: rc would export a list with NULs between
+	# the shim says when its window is up (in /tmp: it takes no shots,
+	# they are the screen's (screenshot | topng), taken on time whatever the game
+	# does); the ready file where the host sees it
+	rm -f /tmp/shot.*
+	XDG_DATA_HOME=$d/data XDG_CONFIG_HOME=$d/config p9drawshot=/tmp/shot p9drawshotat=100000 \
+		$o/openttd -x -c $d/openttd.cfg -v plan9 -s null -m null -d driver^'='^3 >$d/log >[2=1] &
 	pid=$apid
-	sleep $guitime
+	while(! test -f /tmp/shot.ready && test -e /proc/$pid)
+		sleep 1
+	touch $d/shot.ready
+	start=`{date -n}
+	for(t in $guishots){
+		while(test `{date -n} -lt `{echo $start + $t | hoc})
+			sleep 1
+		/tmp/screenshot | topng >/tmp/screen.$t.png
+	}
+	while(test `{date -n} -lt `{echo $start + $guitime | hoc})
+		sleep 1
 	# a faulted process is kept Broken: its stack, for the log
 	if(ps | grep -s '^[^ ]+ +'^$pid^' .*Broken'){
 		{
@@ -133,27 +152,16 @@ fn guirun {
 			echo 'regs()'
 			# a call through nil leaves no frame: the words around the stack top, as symbols
 			echo 'sp=*SP-128; i=0; while i<64 do { a=fmt(sp+8*i, ''Y''); print(fmt(sp+8*i, ''Y''), " ", fmt(*a, ''a''), "\n"); i=i+1; }'
-		} | acid $pid >$d/stack.$n >[2=1]
-		echo video driver, shot at $n: broken, stack in gui/stack.$n
+		} | acid $pid >$d/stack >[2=1]
+		echo video driver: broken, stack in gui/stack
 	}
 	if(test -e /proc/$pid)
 		echo kill >/proc/$pid/note
 	sleep 1
-	echo video driver log, shot at $n:
-	grep -v '^$' $d/log.$n | tail -10
-}
-
-if(test -f $out/gui/openttd.cfg){
-	d=$out/gui
-	if(~ $#guitime 0)
-		guitime=120
-	if(~ $#guishots 0)
-		guishots=200
-	cp $d/openttd.cfg /tmp/gui.cfg
-	personal $d
-	mv /tmp/gui.cfg $d/openttd.cfg
-	for(n in $guishots)
-		guirun $n
+	for(f in `{ls /tmp/screen.*.png >[2]/dev/null})
+		cp $f $d/
+	echo video driver log:
+	grep -v '^$' $d/log | tail -10
 }
 
 # a dedicated server for the host's client
