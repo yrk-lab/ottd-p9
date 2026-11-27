@@ -1,0 +1,11 @@
+# 9front, bare screen 1024x768: on the title screen, the survey
+# question's "Preview survey result", which opens the survey's text;
+# then its scrollbar dragged to the end, where the info section has
+# the machine's memory (#18).  Late: a binary just linked is read
+# cold, and the title may take 50 s to come up
+75 at 437 406
+76 click
+82 at 962 100
+84 mouse_button 1
+85 at 962 700
+92 mouse_button 0

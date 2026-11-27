@@ -191,3 +191,16 @@ libthread, whose main would be the program's); goken and the native builds have 
 `plumb.input` on plan9port with a plumber running (`9p read plumb/web`), and `plumb9f.input` on 9front, where
 build.rc's GUI stage starts a plumber and keeps what reaches the web port in `work/9f/gui/plumbed`: both got
 `https://www.openttd.org/` from the Help window's OpenTTD link.
+
+## The survey's memory size (issue #18)
+
+OpenTTD's survey (its preview: the title screen's question, "Preview survey result") reports the machine's
+memory as `sysconf(_SC_PHYS_PAGES)` pages. The runtime (`../phase0/plan9/os_p9.c`) answers that, and
+`_SC_AVPHYS_PAGES` (the pages free for programs), from 9front's `/dev/swap` (`bytes memory`, `used/total user`);
+where there is none (goken) they fail, as before, and the survey says 0. Checked with `survey9f.input`, which
+opens the preview and drags its scrollbar to the end, where `info.os.memory` is ("4 GiB" in the 4 GB VM,
+`screens/9front-survey-memory.png`):
+
+	ticks=100 gui=1 guitime=105 guishots="70 90 98" guiinput=../phase3/survey9f.input ../phase2/run9front.sh
+
+A binary just linked is read cold: the title may take 50 s to come up, so the input waits for it.

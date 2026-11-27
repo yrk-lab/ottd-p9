@@ -579,3 +579,9 @@ Next steps now (replace section 10's first two items):
   860,40 at t1, game current again at t2), focus9f-rio.input; screenshots 35/52/58/78 show it. First run: the game
   never started in rio (no log at all, pid empty -> build.rc died at `$start + $t`); rerun fine; build.rc now says
   "the game did not start in rio" and goes on (pid=none).
+- SURVEY MEMORY (#18, 2026-11-27): os_p9.c sysconf 85/86 (_SC_PHYS_PAGES/_SC_AVPHYS_PAGES) from /dev/swap
+  (getfields lines, tokenize "N memory", "N pagesize", "u/t user"); goken: open fails -> -1 Einval. Only
+  survey_unix.cpp asks. hardware_concurrency still 1 (sysconf 83/84 return 1; /dev/sysstat has a line per CPU:
+  candidate follow-up). Test: survey9f.input clicks Preview at 75 s (cold-start title took ~50 s after a relink;
+  the first try clicked at 18 s, before the title: console-only shots, not a bug), drags the scrollbar to the end.
+  LESSON: never start run9front.sh while a VM runs: the second clears work/9f, then fails on the ports.

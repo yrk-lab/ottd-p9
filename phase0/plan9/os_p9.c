@@ -40,6 +40,9 @@ enum
 	Scpagesize	= 30,
 	Scnprocconf	= 83,
 	Scnproconln	= 84,
+	Scphyspages	= 85,
+	Scavphyspages	= 86,
+	Pagesize	= 4096,	/* sysconf's */
 };
 
 static void
@@ -429,15 +432,64 @@ uname(char *u)
 	return 0;
 }
 
+/*
+ * The machine's memory in pages (avail: the pages free for programs),
+ * from 9front's /dev/swap: "bytes memory", and "used/total user" in
+ * its pages; -1 where there is none (goken).
+ */
+static vlong
+mempages(int avail)
+{
+	char buf[512], *ln[16], *f[2], *p;
+	uvlong mem, psz, used, tot;
+	int fd, n, i;
+
+	fd = open("/dev/swap", OREAD);
+	if(fd < 0)
+		return -1;
+	n = read(fd, buf, sizeof buf - 1);
+	close(fd);
+	if(n <= 0)
+		return -1;
+	buf[n] = 0;
+	mem = psz = used = tot = 0;
+	n = getfields(buf, ln, nelem(ln), 1, "\n");
+	for(i = 0; i < n; i++){
+		if(tokenize(ln[i], f, nelem(f)) != 2)
+			continue;
+		if(strcmp(f[1], "memory") == 0)
+			mem = strtoull(f[0], nil, 10);
+		else if(strcmp(f[1], "pagesize") == 0)
+			psz = strtoull(f[0], nil, 10);
+		else if(strcmp(f[1], "user") == 0){
+			used = strtoull(f[0], &p, 10);
+			if(*p == '/')
+				tot = strtoull(p + 1, nil, 10);
+		}
+	}
+	if(mem == 0)
+		return -1;
+	if(avail)
+		return psz != 0 && tot >= used ? (tot - used) * psz / Pagesize : -1;
+	return mem / Pagesize;
+}
+
 vlong
 sysconf(int name)
 {
+	vlong n;
+
 	switch(name){
 	case Scnprocconf:
 	case Scnproconln:
 		return 1;
 	case Scpagesize:
-		return 4096;
+		return Pagesize;
+	case Scphyspages:
+	case Scavphyspages:
+		if((n = mempages(name == Scavphyspages)) >= 0)
+			return n;
+		break;
 	case Scclktck:
 		return 100;
 	}
