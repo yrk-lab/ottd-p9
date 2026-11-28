@@ -168,4 +168,56 @@ while(! test -f $d/done && test $i -lt 600){
 	i=`{echo $i + 1 | hoc}
 }
 stop $pid
+# with $gui, the game on the bare screen (VESA, no rio) for $guitime
+# seconds (default 60), the screen at each t of $guishots (default 30)
+# as $out/screen.t.png: ../phase3/screenshot.c, compiled here
+if(~ $gui 1){
+	if(~ $#guitime 0)
+		guitime=60
+	if(~ $#guishots 0)
+		guishots=30
+	# the devices termrc binds after termrc.local: #P holds realmode,
+	# through which aux/vga asks the VESA BIOS for its modes
+	for(i in f t m v L P u U '$' i)
+		bind -a '#'^$i /dev >[2]/dev/null
+	aux/mouse ps2
+	# as termrc for monitor=vesa: the VESA BIOS's real-mode calls go
+	# through aux/realemu (amd64 cannot run them)
+	aux/realemu
+	aux/vga -m vesa -l 1024x768x32 >$out/vga.log >[2=1]
+	echo vga status $status
+	6c -o /tmp/screenshot.6 $r/phase3/screenshot.c && 6l -o /tmp/screenshot /tmp/screenshot.6
+	d=$out/gui
+	rm -rf $d
+	mkdir -p $d/lib/openttd/baseset
+	bind $data/data/openttd/baseset $d/lib/openttd/baseset
+	{
+		echo '[misc]'
+		echo 'savegame_format = none'
+		echo 'prefer_sprite_font = true'
+		echo '[gui]'
+		echo 'autosave = off'
+		echo 'autosave_on_exit = true'
+	} >$d/openttd.cfg
+	home=$d $o/6.openttd -x -c $d/openttd.cfg -v plan9 -s null -m null -d 'driver=3' >$d/log >[2=1] &
+	pid=()
+	i=0
+	while(~ $#pid 0 && test $i -lt 60){
+		sleep 1
+		pid=`{ps | grep ' 6\.openttd$' | awk '{print $2}' | sed 1q}
+		i=`{echo $i + 1 | hoc}
+	}
+	start=`{date -n}
+	for(t in $guishots){
+		while(test `{date -n} -lt `{echo $start + $t | hoc})
+			sleep 1
+		/tmp/screenshot | topng >$out/screen.$t.png
+		echo screenshot $t
+	}
+	while(test `{date -n} -lt `{echo $start + $guitime | hoc})
+		sleep 1
+	stop $pid
+	echo video driver log:
+	grep -v '^$' $d/log | tail -8
+}
 date

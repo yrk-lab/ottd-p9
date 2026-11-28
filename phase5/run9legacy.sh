@@ -39,7 +39,7 @@ ip/ipconfig >[2]/dev/null
 ip/ipconfig loopback /dev/null 127.1
 # a shell for ../phase2/vmsh (host port 17019), as run9front.sh's
 aux/listen1 -t 'tcp!*!17019' /bin/rc &
-ticks=${ticks:-100} rc /n/ottd/$script >/n/ottd/phase5/work/out.txt >[2=1]
+ticks=${ticks:-100} gui=${gui:-0} guitime=${guitime:-60} guishots=(${guishots:-30}) rc /n/ottd/$script >/n/ottd/phase5/work/out.txt >[2=1]
 if(! ~ ${keep:-0} 1)
 	echo reboot >'#c/reboot'
 EOF
@@ -54,7 +54,7 @@ elif id -nG "$(id -un)" | grep -qw kvm && sudo -n true 2>/dev/null; then
 fi
 $wrap timeout ${timeout:-600} qemu-system-x86_64 $accel -m 4G -smp 2 -no-reboot \
 	-kernel "$root/amd64/9k10f.elf" \
-	-append "nobootprompt=virtio9p user=glenda console=0 b115200 *nomp=1" \
+	-append "nobootprompt=virtio9p user=glenda console=0 b115200 *nomp=1 monitor=vesa vgasize=1024x768x32 mouseport=ps2" \
 	-fsdev local,id=root,path="$root",security_model=none \
 	-device virtio-9p-pci,disable-legacy=on,fsdev=root,mount_tag=root \
 	-fsdev local,id=repo,path="$repo",security_model=none \
