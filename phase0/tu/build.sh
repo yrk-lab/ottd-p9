@@ -72,7 +72,7 @@ CFLAGS=-w -I\$P0/plan9/shim
 RTCFLAGS=-w -DEH_TLS -I\$P0/eh -I\$P0/eh/plan9
 LDFLAGS=
 LIBS=
-RUNTIME=rt_p9 libc_p9 os_p9 os9f sig9f thread_p9 thread9f net_p9 net9f draw_p9 kbd9f win9f audio9f plumb9f eh_rt
+RUNTIME=rt_p9 libc_p9 os_p9 os9f sig9f thread_p9 thread9f net_p9 net9f cons9f draw_p9 kbd9f win9f audio9f plumb9f eh_rt
 EOF
 # Linux with its own C library (the fast loop for what libdraw does:
 # plan9port's, through devdraw): the units' c_ names are the C

@@ -37,7 +37,7 @@ echo mk: `{grep -c '^6[cl] ' $out/mk.log} commands
 date
 
 # the socket tests, against the runtime
-rt=($o/rt_p9.6 $o/libc_p9.6 $o/os_p9.6 $o/os9f.6 $o/sig9f.6 $o/thread_p9.6 $o/thread9f.6 $o/net_p9.6 $o/net9f.6)
+rt=($o/rt_p9.6 $o/libc_p9.6 $o/os_p9.6 $o/os9f.6 $o/sig9f.6 $o/thread_p9.6 $o/thread9f.6 $o/net_p9.6 $o/net9f.6 $o/cons9f.6)
 for(f in `{ls $r/phase2/work/nettest/*.c >[2]/dev/null}){
 	n=`{basename $f .c}
 	if(6c -w -I$r/phase0/plan9/shim -o $out/$n.6 $f >$out/$n.log >[2=1] && 6l -o $out/$n.x $out/$n.6 $rt >>$out/$n.log >[2=1]){

@@ -142,6 +142,9 @@ cwrite(CFile *f, void *v, long n)
 	return 0;
 }
 
+/* stdin's reads, where a reader process has it (cons9f.c); nil: read(2) */
+long	(*c_stdinread)(void*, long);
+
 static int
 cgetc(CFile *f)
 {
@@ -150,7 +153,10 @@ cgetc(CFile *f)
 			return -1;
 		if(f == &cin)
 			cflush(&cout);
-		f->n = read(f->fd, f->buf, Bufsize);
+		if(f == &cin && c_stdinread != nil)
+			f->n = c_stdinread(f->buf, Bufsize);
+		else
+			f->n = read(f->fd, f->buf, Bufsize);
 		f->p = 0;
 		if(f->n <= 0){
 			f->n = 0;

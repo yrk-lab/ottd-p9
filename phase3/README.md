@@ -41,6 +41,14 @@ process, as rd's: the atexit table is shared memory here and too small for the t
 written with echo (`interrupt\n`) matched nothing and killed the main process outright, leaving its helpers
 running (`[audio]`, `[music]`, `[net]`: the names of #15 made them visible).
 
+The dedicated server's console (issue #22) is its standard input: OpenTTD polls it with `select` and reads a line
+through `std::cin`. The runtime's `select` answers for sockets only, whose helpers read ahead; a read of fd 0 would
+block the game. So standard input gets a helper too (`../phase0/plan9/cons9f.c`, `[cons]` in `ps -a`), started the
+first time `select` is asked about it: it reads fd 0 into a ring, `select` answers from the ring, and `cin` is
+filled from it. Console commands typed in the server's window, or piped in (`{echo save x; echo quit} |
+6.openttd -D`), run as on Unix. Checked on 9front: two `save` commands and `quit` through a pipe, the saves made
+and nothing left behind.
+
 Esc, for example, is rune 0x1B,
 `WKC_ESC`: in the game it cancels the tool in hand (the main toolbar's "reset_object_to_place" hotkey), in a query
 or a text box it cancels, and it closes the load/save dialog and the high scores; it does not close other windows

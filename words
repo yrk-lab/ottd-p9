@@ -608,3 +608,8 @@ Next steps now (replace section 10's first two items):
   atexitkiller, vncv's "die vnc kin", rio/libthread threadexitsall. Not atexit per process: onex[] (NEXIT 33)
   is shared under RFMEM. build.rc stop: echo -n, wait status, "left behind: N"; run9front.sh "== stops" fails on
   them. Checked in VM: server quits on "interrupt\n" (status ''), nothing left; "kill" to main only -> helpers go.
+- SERVER CONSOLE (#22, 2026-11-28): dedicated_v.cpp InputWaiting = select(stdin) then getline(cin). net_p9.c
+  c_select only knew sockets. cons9f.c (9front RUNTIME + build.rc nettest rt): stdinready() starts a p9proc
+  reader ("cons") of fd 0 into an 8K ring on first ask; c_select fd 0 with no socket -> stdinready(); libc_p9.c
+  cgetc fills cin via c_stdinread (function pointer, nil on goken = read(2)). EOF -> always ready, getline fails:
+  as Unix with </dev/null. Checked: piped save x2 + quit -> both saved, quit, nothing left; [cons] in ps -a.

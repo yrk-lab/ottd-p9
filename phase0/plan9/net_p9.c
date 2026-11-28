@@ -862,10 +862,12 @@ writable(Sock *s)
 	return s->state == Sconnected || s->type == Sockdgram;
 }
 
+int	stdinready(void);	/* cons9f.c */
+
 /*
- * select over glibc fd_sets (1024 bits).  Only sockets are ever
- * ready: the program polls standard input with it too (the dedicated
- * server's console), and a read there would block.
+ * select over glibc fd_sets (1024 bits): sockets, and standard input
+ * (the dedicated server's console), which a reader process makes
+ * pollable (cons9f.c); no other descriptor is ever ready.
  */
 int
 c_select(int n, uvlong *r, uvlong *w, uvlong *e, Ctimeval *tv)
@@ -898,8 +900,13 @@ c_select(int n, uvlong *r, uvlong *w, uvlong *e, Ctimeval *tv)
 			if(!((rin[fd/64] | win[fd/64]) & bit))
 				continue;
 			s = socks[fd];
-			if(s == nil)
+			if(s == nil){
+				if(fd == 0 && (rin[0] & bit) && stdinready()){
+					r[0] |= bit;
+					cnt++;
+				}
 				continue;
+			}
 			if((rin[fd/64] & bit) && readable(s)){
 				r[fd/64] |= bit;
 				cnt++;
