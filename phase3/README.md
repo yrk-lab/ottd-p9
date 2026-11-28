@@ -47,6 +47,12 @@ on (MXCSR 0x1900); C, C++ and LLVM assume they are off. LLVM speculates floating
 arm runs on an integer's bits too, and with the traps on that killed the game ("sys: fp: invalid operation") when
 an AI passed an integer. `p9runmain` masks them before anything is forked, as C's default environment has it.
 
+The game loop runs in a thread of its own (issue #28), `ottd:game`, as with upstream's SDL driver: the Plan 9
+driver starts it (`StartGameThread`) unless given `no_threads`, and its main loop only reads input and paints.
+Before, the game ticked in the drawing loop, so painting a big window held fast forward back to about normal
+speed. Checked on 9front with `ff9f.input` (a game from the console's `newgame`, then the toolbar's fast forward):
+normal speed a day in about 2.1 s, fast-forwarded about 12 days a second.
+
 The dedicated server's console (issue #22) is its standard input: OpenTTD polls it with `select` and reads a line
 through `std::cin`. The runtime's `select` answers for sockets only, whose helpers read ahead; a read of fd 0 would
 block the game. So standard input gets a helper too (`../phase0/plan9/cons9f.c`, `[cons]` in `ps -a`), started the
@@ -256,3 +262,7 @@ build.rc compiles it with 6c and FreeType's flags and compares it with clang's o
 goken, the Linux fast loop and build-p9's native link cannot use any FreeType through these headers: they link
 `../phase0/plan9/freetype_none.c`, whose `FT_Init_FreeType` fails, and the game keeps its sprite fonts, as before.
 Checked on 9front: the title screen in TrueType (`screens/9front-truetype.png`), the gate the same.
+
+The tests have the sprite font (`prefer_sprite_font = true` in every configuration they write: the GUI tests'
+positions are measured with it); `fonts=truetype ../phase2/run9front.sh` gives the GUI test FreeType's fonts. In
+the game, Game Options → Graphics → "Use traditional sprite font" switches between them.

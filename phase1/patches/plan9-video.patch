@@ -1,6 +1,6 @@
 --- src-ref/src/video/plan9_v.cpp	1970-01-01 01:00:00.000000000 +0100
 +++ src-p9/src/video/plan9_v.cpp	1970-01-01 01:00:00.000000000 +0100
-@@ -0,0 +1,386 @@
+@@ -0,0 +1,389 @@
 +/*
 + * This file is part of OpenTTD.
 + * OpenTTD is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 2.
@@ -180,7 +180,7 @@
 +	_p9_interrupted = 1;
 +}
 +
-+std::optional<std::string_view> VideoDriver_Plan9::Start(const StringList &)
++std::optional<std::string_view> VideoDriver_Plan9::Start(const StringList &param)
 +{
 +	int w, h;
 +
@@ -194,7 +194,8 @@
 +		return "the Plan 9 video driver needs a 32 bpp blitter";
 +	}
 +
-+	this->is_game_threaded = false;
++	/* The game loop in a thread of its own (ottd:game), as SDL's: painting does not hold it back (fast forward). */
++	this->is_game_threaded = !GetDriverParamBool(param, "no_threads") && !GetDriverParamBool(param, "no_thread");
 +	std::signal(SIGINT, P9Interrupt);
 +	return std::nullopt;
 +}
@@ -358,12 +359,14 @@
 +
 +void VideoDriver_Plan9::MainLoop()
 +{
-+	for (;;) {
-+		if (_exit_game) break;
++	this->StartGameThread();
 +
++	while (!_exit_game) {
 +		this->Tick();
 +		this->SleepTillNextTick();
 +	}
++
++	this->StopGameThread();
 +}
 +
 +/* The window's size is the user's: rio resizes it. */

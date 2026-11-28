@@ -626,3 +626,10 @@ Next steps now (replace section 10's first two items):
   evaluates both arms, (int64_t)(float) of an integer's bits -> CVTTSS2SQ invalid. 9front MXCSR 0x1900 traps
   INVAL/ZDIV/OVFL (APE doesn't mask on amd64). Fix: thread9f.c p9runmain setfcr(getfcr() & ~(FPINVAL|FPZDIV|FPOVFL|
   FPUNFL|FPINEX)) before forks. amd64 setfcr: set bit = trap enabled (it XORs into MXCSR's mask bits).
+- GAME THREAD (#28, 2026-11-28): plan9_v.cpp Start: is_game_threaded = !no_threads (as SDL); MainLoop:
+  StartGameThread / Tick+SleepTillNextTick / StopGameThread. Before: game ticked in the paint loop -> FF ~normal
+  (user: noticeable only with a 100x100 window). ff9f.input: grave, newgame, ret; FF at (55,11) (pause is 0-36 at
+  this toolbar size; (33,11) hit pause). Dates: 2.1 s/day normal, ~12 days/s FF. Tests now prefer_sprite_font =
+  true everywhere (fonts=truetype for FreeType tests); GUI test cfg autosave_on_exit = true (in a game the
+  interrupt otherwise asks, and stop kills it). LESSON: never pipe translate.sh into head (SIGPIPE kills it before
+  zlib/liblzma: goken link then misses inflate/lzma_*).
