@@ -1,0 +1,25 @@
+#!/bin/rc
+# the 9legacy bundle (../phase3/bundle.sh, sys=9legacy), unpacked and
+# installed as its README says, in a fresh home in memory; the
+# installed game plays 100 ticks with the null video driver and saves
+# on exit, which says it found its data.  Run by run9legacy.sh
+# (script=phase5/bundletest9l.rc)
+rfork en
+ramfs
+w=/n/ottd/phase3/work
+t=/tmp/bt
+mkdir -p $t/home
+cd $t
+gunzip <$w/openttd-*-9legacy-amd64.tgz | tar x
+echo unpacked: `{ls $t/openttd}
+home=$t/home
+cd $t/openttd
+mk install
+cd /
+echo installed: `{ls $home/bin/amd64/openttd} `{ls $home/lib/openttd}
+{ echo '[gui]'; echo 'autosave = off'; echo 'autosave_on_exit = true' } >$home/lib/openttd/openttd.cfg
+$home/bin/amd64/openttd -v 'null:ticks=100' -s null -m null -G 1 -g >/tmp/log >[2=1]
+echo played: status $status
+ls $home/lib/openttd/save/autosave/exit.sav >[2=1]
+tail -3 /tmp/log
+echo done

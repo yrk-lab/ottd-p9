@@ -1,11 +1,12 @@
-OpenTTD for 9front (amd64)
+OpenTTD for @SYSTEM@ (amd64)
 
-OpenTTD 15.3, translated from C++ to C and compiled with 9front's
+OpenTTD 15.3, translated from C++ to C and compiled with @SYSTEM@'s
 own compilers (https://github.com/yrk-lab/ottd-p9).  This directory
 has the game (6.openttd: a Plan 9 binary, before it is installed),
 the data it needs (lang, ai, game, media, bin, baseset, with the
 free base sets OpenGFX, OpenSFX and OpenMSX), an mkfile to install
-it, the licences (doc) and OpenTTD's own README.md.
+it, the licences (doc) and OpenTTD's own README.md.  The binary is
+@SYSTEM@'s: there is a bundle for 9front and one for 9legacy.
 
 Run it in place
 
@@ -33,7 +34,7 @@ $home/lib/openttd is the game's own directory: its configuration
 (openttd.cfg), saved games (save), screenshots, and what it
 downloads; it is also searched for data, as /sys/lib/openttd is.
 
-Sound and music
+Sound and music (9front)
 
 The sound goes to /dev/audio; without a sound card (no /dev/audio:
 bind -a '#A' /dev, or audio0= in plan9.ini) the game is silent.
@@ -42,21 +43,35 @@ instrument bank of the Doom WAD 9front comes with
 (/sys/games/lib/doom/doom1.wad).  A different bank, a GENMIDI lump
 as a file named genmidi, can be put in a baseset directory.
 
+On 9legacy
+
+There is no sound (no audio device on amd64), and the keyboard gives
+characters only, not keys going down and up: a held arrow key does
+not scroll the map (drag with the right button, or use the arrows
+one press at a time).
+
 A server
 
 	./6.openttd -D
 
 is a dedicated server on port 3979; other OpenTTD 15.3 games (on
-any system) can join it.
+any system) can join it.  Its console reads the server's standard
+input: type commands in its window (save x, quit), or pipe them in.
 
 Notes
 
-- No threads: map generation and saving run in the game itself, and
-  it pauses for them.  No TrueType fonts: the built-in sprite font.
+- The text is drawn with OpenTTD's own TrueType fonts (FreeType,
+  linked in).  Game Options, Graphics, "Use traditional sprite font"
+  switches to the built-in sprite font.
+- The game loop, map generation, saving and the link graph run in
+  threads of their own (Plan 9 processes: ps -a shows them by name).
+- The interrupt (Del in a rio text window, or a note) asks the game
+  to quit, as Ctrl+Q does; Del in the game's window closes its
+  windows, as in OpenTTD elsewhere.  Web links are plumbed.
 - The first start asks whether to take part in the survey: there is
   no web access here, nothing is ever sent; answer No.
 - Saves of other OpenTTD 15.x games load, compressed or not.
 
 OpenTTD is free software under the GNU General Public License,
 version 2 (doc/COPYING.md); the base sets carry their own licences
-(baseset/*/license.txt).
+(baseset/*/license.txt).  FreeType is under the FreeType licence.

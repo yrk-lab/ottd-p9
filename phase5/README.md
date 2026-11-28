@@ -56,3 +56,10 @@ takes screenshots (`work/9l/screen.t.png`). run9legacy.sh compares the saves wit
   survey dismissed, New Game, Generate, the console with the backquote and "help" typed into it
   (`screens/9legacy-input-timeline.png`: 20, 30, 45, 58, 64 s). The held arrow does not scroll: 4e has no key-up
   events.
+
+## The bundle
+
+`sys=9legacy ../phase3/bundle.sh` makes `../phase3/work/openttd-<version>-9legacy-amd64.tgz`: the binary 9legacy's
+compilers built (`obj.9legacy`), the same data and mkfile as 9front's bundle, README.Plan9 naming the system.
+`bundletest9l.rc` (`script=phase5/bundletest9l.rc ./run9legacy.sh`) unpacks it in a fresh home, installs it with
+`mk install` and plays 100 ticks with the installed binary: it found its data and saved on exit.
