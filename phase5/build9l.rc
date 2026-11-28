@@ -78,4 +78,94 @@ fn play {
 }
 play world
 play regression
+# the threads' test (../phase0/tests_tu/t2), as on 9front: ten runs,
+# each the native build's output
+@{
+	cd $r/phase0/out/tu/t2
+	if(! mk 'SYS=9legacy' >$out/t2.mk.log >[2=1]){
+		echo t2 mk FAILED
+		tail -10 $out/t2.mk.log
+		exit t2
+	}
+	n=0
+	for(i in `{seq 1 10}){
+		obj.9legacy/6.t2 >/tmp/t2.out >[2=1]
+		if(cmp -s /tmp/t2.out $r/phase0/tests_tu/t2/expected)
+			n=`{echo $n + 1 | hoc}
+	}
+	echo t2: $n of 10 as expected
+}
+
+# stop pid, as build.rc: the interrupt, which the game takes as a quit
+# request; its status, and what it left behind
+fn stop {
+	echo -n interrupt >/proc/$1/note >[2]/dev/null
+	i=0
+	while(test -e /proc/$1 && test $i -lt 10){
+		sleep 1
+		i=`{echo $i + 1 | hoc}
+	}
+	if(test -e /proc/$1){
+		echo $1 did not quit on interrupt: killed
+		# where it is, for a look: every process of the program
+		for(p in `{ps | grep ' 6\.openttd$' | awk '{print $2}'}){
+			echo '==' $p `{cat /proc/$p/status | awk '{print $1, $2, $3}'}
+			echo 'lstk()' | acid $p >[2=1] | sed 40q
+		} >$out/stuck.txt >[2=1]
+		echo kill >/proc/$1/notepg >[2]/dev/null
+	}
+	if not{
+		wait $1
+		if(~ $status *interrupt*)
+			echo killed by the interrupt: $status
+		if not
+			echo quit on interrupt
+	}
+	sleep 2
+	left=`{ps | grep -c ' 6\.openttd$'}
+	if(! ~ $left 0){
+		echo left behind: $left processes
+		ps -a | grep '6\.openttd' | grep -v grep
+	}
+}
+
+# a dedicated server for the host's client (run9legacy.sh), as build.rc's
+d=$out/ded
+rm -rf $d
+mkdir -p $d/lib/openttd/baseset
+bind $data/data/openttd/baseset $d/lib/openttd/baseset
+{
+	echo '[misc]'
+	echo 'savegame_format = none'
+	echo 'prefer_sprite_font = true'
+	echo '[gui]'
+	echo 'autosave = off'
+	echo '[network]'
+	echo 'server_name = 9legacy'
+} >$d/openttd.cfg
+# 4e's rc forks again for home=... before a command (and for @{...}):
+# $apid would be another rc's, not the game's, and the interrupt would
+# miss it.  The game is found as build.rc finds it in rio: by ps, while
+# it is the only one (its helpers start later)
+home=$d $o/6.openttd -D -x -c $d/openttd.cfg -d 'net=3' >$d/log >[2=1] &
+pid=()
+i=0
+while(~ $#pid 0 && test $i -lt 60){
+	sleep 1
+	pid=`{ps | grep ' 6\.openttd$' | awk '{print $2}' | sed 1q}
+	i=`{echo $i + 1 | hoc}
+}
+i=0
+while(! grep -s 'starting game' $d/log && test $i -lt 300){
+	sleep 1
+	i=`{echo $i + 1 | hoc}
+}
+date >$d/ready
+echo dedicated server up
+i=0
+while(! test -f $d/done && test $i -lt 600){
+	sleep 1
+	i=`{echo $i + 1 | hoc}
+}
+stop $pid
 date
