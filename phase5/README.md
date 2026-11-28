@@ -16,6 +16,7 @@ after it), starts vmsh's listener, runs `$script` and reboots, which ends QEMU; 
 	script=phase5/build9l.rc ticks=100000 ./run9legacy.sh
 	script=phase5/build9l.rc gui=1 guishots="30 50" ./run9legacy.sh
 	script=phase5/build9l.rc gui=1 guitime=70 guishots="20 30 45 58 64" guiinput=../phase3/newgame9f.input ./run9legacy.sh
+	script=phase5/build9l.rc gui=1 guirio=1 guifocus="40 60" guitime=85 guishots="35 52 58 70 78" guiinput=focus9l-rio.input ./run9legacy.sh
 
 `build9l.rc` builds FreeType (a tree of its own, `../phase1/work/freetype9l`: 9front's objects are another
 compiler's) and the translated game (`mk SYS=9legacy` in `../phase2/work/tu`, objects in `obj.9legacy`) with
@@ -38,6 +39,8 @@ takes screenshots (`work/9l/screen.t.png`). run9legacy.sh compares the saves wit
 ## What 4e is like
 
 - No `cut`: the scripts use awk.
+- rc takes no `if not` after an `if(...){...}` whose block holds a `{...} >file` group (build.rc's rio part):
+  build9l.rc says `if(! ...)`.
 - rc forks again for an environment assignment before a command (`home=$d cmd &`) and for `@{...}`: `$apid` is
   then another rc, and an interrupt sent there misses the program. build9l.rc finds the server with ps.
 - The VESA BIOS's real-mode calls go through `aux/realemu` on amd64, as termrc does for `monitor=vesa`; without
@@ -56,6 +59,10 @@ takes screenshots (`work/9l/screen.t.png`). run9legacy.sh compares the saves wit
   survey dismissed, New Game, Generate, the console with the backquote and "help" typed into it
   (`screens/9legacy-input-timeline.png`: 20, 30, 45, 58, 64 s). The held arrow does not scroll: 4e has no key-up
   events.
+- In a rio window (`gui=1 guirio=1 guifocus="40 60" guiinput=focus9l-rio.input`): the game's cursor while its
+  window is current, rio's while another is (win9f.c follows 4e rio's wctl too), the game's again once a click
+  makes its window current (`screens/9legacy-rio-focus.png`: 35, 58, 70, 78 s). 4e's rio does not act on
+  `current` written to a window's wctl, which 9front's test uses: `focus9l-rio.input` clicks instead.
 
 ## The bundle
 

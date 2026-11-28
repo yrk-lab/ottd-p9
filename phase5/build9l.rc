@@ -202,10 +202,38 @@ if(~ $gui 1){
 	# the draw shim says when its window is up (p9drawshot: /tmp/shot.ready;
 	# no shots of its own): then the host's input begins (gui/shot.ready)
 	rm -f /tmp/shot.ready
-	home=$d p9drawshot=/tmp/shot p9drawshotat=100000 $o/6.openttd -x -c $d/openttd.cfg -v plan9 -s null -m null -d 'driver=3' >$d/log >[2=1] &
+	if(~ $guirio 1){
+		# in a rio window (40,40 to 840,640), as build.rc's guirio; with
+		# $guifocus (t1 t2) another window is made current at t1, the
+		# game's again at t2 (win9f.c's /dev/wctl)
+		{
+			echo '#!/bin/rc'
+			echo 'home='$d' p9drawshot=/tmp/shot p9drawshotat=100000' \
+				$o/6.openttd -x -c $d/openttd.cfg -v plan9 -s null -m null -d '''driver=3''' '>'$d/log '>[2=1]'
+		} >/tmp/game
+		{
+			echo '#!/bin/rc'
+			echo window -r 40 40 840 640 /tmp/game
+			if(~ $#guifocus 2){
+				echo '{'
+				echo '	sleep' $guifocus(1)
+				echo '	window -r 860 40 1010 300 rc'
+				echo '	sleep' `{echo $guifocus(2) - $guifocus(1) | hoc}
+				echo '	for(w in /dev/wsys/* /mnt/wsys/wsys/*)'
+				echo '		if(grep -s ''^OpenTTD'' $w/label >[2]/dev/null)'
+				echo '			echo current >$w/wctl'
+				echo '} &'
+			}
+		} >/tmp/rioinit
+		chmod +x /tmp/game /tmp/rioinit
+		rio -i /tmp/rioinit </dev/null >/dev/null >[2=1] &
+	}
+	# (4e's rc takes no if not after that block)
+	if(! ~ $guirio 1)
+		home=$d p9drawshot=/tmp/shot p9drawshotat=100000 $o/6.openttd -x -c $d/openttd.cfg -v plan9 -s null -m null -d 'driver=3' >$d/log >[2=1] &
 	pid=()
 	i=0
-	while(~ $#pid 0 && test $i -lt 60){
+	while(~ $#pid 0 && test $i -lt 120){
 		sleep 1
 		pid=`{ps | grep ' 6\.openttd$' | awk '{print $2}' | sed 1q}
 		i=`{echo $i + 1 | hoc}
@@ -223,6 +251,8 @@ if(~ $gui 1){
 	while(test `{date -n} -lt `{echo $start + $guitime | hoc})
 		sleep 1
 	stop $pid
+	if(~ $guirio 1)
+		slay rio | rc
 	echo video driver log:
 	grep -v '^$' $d/log | tail -8
 }

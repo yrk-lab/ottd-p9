@@ -1,0 +1,10 @@
+# 9legacy in rio: as ../phase3/focus9f-rio.input (guifocus="40 60"),
+# but the game's window is also made current the way one does it, with
+# a click on it (an empty spot of the title screen's landscape), at
+# 65 s: 4e's rio may not take wctl's current
+30 at 400 300
+50 at 300 250
+54 at 420 330
+64 at 100 600
+65 click
+72 at 360 280

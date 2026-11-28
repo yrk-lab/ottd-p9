@@ -39,7 +39,7 @@ ip/ipconfig >[2]/dev/null
 ip/ipconfig loopback /dev/null 127.1
 # a shell for ../phase2/vmsh (host port 17019), as run9front.sh's
 aux/listen1 -t 'tcp!*!17019' /bin/rc &
-ticks=${ticks:-100} gui=${gui:-0} guitime=${guitime:-60} guishots=(${guishots:-30}) rc /n/ottd/$script >/n/ottd/phase5/work/out.txt >[2=1]
+ticks=${ticks:-100} gui=${gui:-0} guirio=${guirio:-0} guifocus=(${guifocus:-}) guitime=${guitime:-60} guishots=(${guishots:-30}) rc /n/ottd/$script >/n/ottd/phase5/work/out.txt >[2=1]
 if(! ~ ${keep:-0} 1)
 	echo reboot >'#c/reboot'
 EOF
