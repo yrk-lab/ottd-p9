@@ -1,0 +1,101 @@
+OpenTTD @VERSION@ for Plan 9: the source (9front and 9legacy, amd64)
+
+This is OpenTTD, the free transport simulation game, as C that
+Plan 9's own compilers build: 6c and 6l, on 9front or on 9legacy
+(Plan 9 from Bell Labs, 4th edition, with the 9legacy patches).
+Nothing here needs a C++ compiler.
+
+The C in tu is generated
+
+OpenTTD is written in C++.  The C in tu was not written by anyone:
+an automated pipeline translated OpenTTD's own source into it.  It
+is complete and builds as it is, but it is a compiler's output, as
+an assembler listing would be: long, flat and hard to read, with
+names from LLVM (_1234, llvm_cbe_...) and from C++'s name mangling
+(_ZN11VideoDriver4TickEv).  Do not edit it to change the game:
+change OpenTTD's source and translate it again (below), or change
+the runtime, which is hand-written.
+
+How it was made (https://github.com/yrk-lab/ottd-p9, commit
+@COMMIT@):
+
+1. OpenTTD @VERSION@ (@OTTDHASH@), with a few patches for Plan 9:
+   the video, sound and music drivers, Plan 9's paths, web links
+   through the plumber.
+2. Each of its source files compiled by clang to LLVM IR (@CLANG@),
+   for amd64, with libc++ and libc++abi (LLVM @LLVM@) as IR too, and
+   zlib (@ZLIB@) and liblzma (xz @XZ@) translated with it.
+3. Exceptions lowered: the C that comes out has no unwinding, so
+   calls that may throw go through small wrappers (tu/invoke.c) that
+   return what was thrown, as the runtime's exception support
+   (runtime/eh) expects.
+4. llvm-cbe (@CBE@) turned each unit's IR into C, and a lowering
+   pass made that C acceptable to Plan 9's compilers: tu/*.c, one
+   file per OpenTTD source file, 600 or so; tu/ctors.c runs the
+   static constructors.
+5. The C library calls the program makes are renamed (c_...), so
+   that the runtime answers them, on Plan 9's library.
+
+The rest is hand-written, and meant to be read and changed:
+
+	runtime/plan9	the runtime: the C library the game expects
+			(stdio, files, time, errno, glibc's data layouts),
+			threads as Plan 9 processes, sockets on /net,
+			notes as signals, the draw, keyboard and audio
+			shims under the game's Plan 9 drivers; files
+			ending in 9f are 9front's, others are shared or
+			9legacy's (Plan 9 from Bell Labs carried on)
+	runtime/eh	the exception runtime the lowering targets
+	tu/mkfile	generated too, but plain mk: config.9front and
+			config.9legacy say which runtime parts each
+			system takes
+
+FreeType (freetype) is not translated: it is FreeType @FREETYPE@, its own C, with
+its Plan 9 mkfile, built here and linked in.  The data (lang, ai,
+game, media, bin, baseset, with OpenGFX, OpenSFX and OpenMSX) are
+the game's.
+
+Build and install it
+
+	mk
+
+builds FreeType, then the game (a few minutes; the link is the
+longest step), and leaves 6.openttd here, next to its data: run it
+as ./6.openttd from a rio window or on the bare screen.  The system
+is found from libc.h (9front has atomic(2)); mk SYS=9front or
+SYS=9legacy says it.  Then
+
+	mk install
+
+for yourself: $home/bin/$cputype/openttd, the data in
+$home/lib/openttd.  For everyone (as the host owner):
+
+	mk BIN=/$cputype/bin install
+
+with the data in /sys/lib/openttd.  mk uninstall takes it away;
+mk clean the objects.
+
+Differences between the systems
+
+9front: sound through /dev/audio, music through games/dmid and
+games/opl3, keys going down and up (/dev/kbd).  9legacy: sound where
+there is a device (not on amd64), no MIDI player (no music), keys as
+characters (a held arrow does not scroll).
+
+Translating it again
+
+The repository (https://github.com/yrk-lab/ottd-p9) has the
+pipeline: phase1/setup.sh fetches OpenTTD, the base sets, zlib, xz
+and FreeType; phase1/build_p9.sh and phase1/translate.sh make the
+IR; phase2/buildtu.sh makes the C in tu; phase6/srcbundle.sh makes
+this bundle.  They run on Linux (Debian or Ubuntu, clang 17).
+
+Licences
+
+OpenTTD: GNU General Public License, version 2 (doc/COPYING.md),
+and its third-party code's (doc/3rdparty-*).  The translated libc++
+and libc++abi: Apache 2.0 with LLVM exceptions (doc/libcxx-*,
+doc/libcxxabi-*).  zlib (doc/zlib-LICENSE), liblzma
+(doc/xz-COPYING*), FreeType (doc/FreeType-FTL.TXT).  The base sets
+carry their own (baseset/*/license.txt).  OpenTTD's README.md is
+here too.

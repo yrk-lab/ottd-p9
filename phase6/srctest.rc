@@ -1,0 +1,69 @@
+#!/bin/rc
+# srctest.rc - the source bundle (srcbundle.sh), unpacked, built and
+#	run as its README says, on 9front (../phase2/run9front.sh
+#	script=phase6/srctest.rc) or 9legacy (../phase5/run9legacy.sh,
+#	the same): unpacked in work/t.$sys, mk, the gate's scenarios with
+#	the built 6.openttd for $ticks ticks (default 100000; the saves in
+#	work/t.$sys/out, for ../phase1/gate.sh), then mk install in a fresh
+#	home and the installed game's -h.  Keeps to what 4e's rc and tools
+#	have (no cut; no if not after a block).
+rfork en
+r=/n/ottd
+w=$r/phase6/work
+if(~ $#ticks 0)
+	ticks=100000
+sys=`{grep -s acasl /sys/include/libc.h && echo 9front || echo 9legacy}
+t=$w/t.$sys
+echo system $sys
+date
+rm -rf $t
+mkdir -p $t/out
+cd $t
+gunzip <$w/openttd-*-src.tgz | tar x
+cd openttd-*-src
+echo unpacked: `{ls | wc -l} entries
+if(! mk >$t/mk.log >[2=1]){
+	echo mk FAILED
+	grep -v '^warning' $t/mk.log | tail -20 | awk '{print substr($0, 1, 300)}'
+	exit mk
+}
+echo mk: `{grep -c '^6[cl] ' $t/mk.log} compiler commands
+date
+./6.openttd -h >[2=1] | sed 1q
+
+# the gate's scenarios, as ../phase2/build.rc plays them, in homes in memory
+rfork n
+ramfs
+fn play {
+	d=/tmp/$1
+	mkdir -p $d/lib/openttd/baseset
+	bind $r/phase1/work/data/openttd/baseset $d/lib/openttd/baseset
+	{
+		echo '[misc]'
+		echo 'savegame_format = none'
+		echo 'prefer_sprite_font = true'
+		echo '[gui]'
+		echo 'autosave = off'
+		echo 'autosave_on_exit = true'
+		echo '[game_creation]'
+		echo 'town_name = english'
+		echo '[ai_players]'
+		echo 'none ='
+	} >$d/openttd.cfg
+	game=(-G 1234567 -g)
+	if(~ $1 regression)
+		game=(-g $r/phase1/work/regression.sav)
+	home=$d ./6.openttd -x -c $d/openttd.cfg -v 'null:ticks='^$ticks -s null -m null $game >$t/$1.log >[2=1]
+	cp $d/save/autosave/exit.sav $t/out/$1.sav >[2]/dev/null && echo $1: saved
+}
+play world
+play regression
+date
+
+# installed for the user, run from elsewhere
+home=/tmp/home
+mkdir -p $home
+mk install >$t/install.log >[2=1]
+echo install status $status
+$home/bin/$cputype/openttd -h >[2=1] | sed 1q
+echo done

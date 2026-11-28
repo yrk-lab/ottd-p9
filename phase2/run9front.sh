@@ -41,6 +41,9 @@
 #	While it runs, ./vmsh is a shell in the VM and ./vmfs reads its
 #	namespace (/proc, /net, /dev/kmesg...) with plan9port's 9p; the
 #	QEMU monitor is work/qemu.mon (screendump file.ppm: the screen).
+#	With script=path (in the repository) that rc script runs instead
+#	of build.rc (../phase6/srctest.rc, the source bundle's test); its
+#	output is work/9f/results.txt.
 #	With keep=1 the VM stays up after build.rc, for a look around:
 #	./vmsh 'echo reboot >/dev/reboot' ends it.
 set -uo pipefail
@@ -113,13 +116,13 @@ if(~ $p9test ottd){
 	aux/listen1 -t tcp!*!17019 /bin/rc &
 	aux/listen1 -t tcp!*!17564 /bin/exportfs -s &
 	bind /n/ottdfs/ottd /n/ottd
-	objtype=amd64 NPROC=2 ticks=TICKS guitime=GUITIME guishots=(GUISHOTS) guirio=GUIRIO guiresize=(GUIRESIZE) guifocus=(GUIFOCUS) guiaudio=GUIAUDIO netdebug=NETDEBUG rc /n/ottd/phase2/build.rc >/n/ottd/phase2/work/9f/results.txt >[2=1]
+	objtype=amd64 NPROC=2 ticks=TICKS guitime=GUITIME guishots=(GUISHOTS) guirio=GUIRIO guiresize=(GUIRESIZE) guifocus=(GUIFOCUS) guiaudio=GUIAUDIO netdebug=NETDEBUG rc /n/ottd/SCRIPT >/n/ottd/phase2/work/9f/results.txt >[2=1]
 	cat /n/ottd/phase2/work/9f/results.txt
 	if(! ~ KEEP 1)
 		echo reboot >/dev/reboot
 }
 RC
-sed -i "s/TICKS/${ticks:-100000}/; s/GUITIME/${guitime:-120}/; s/GUISHOTS/${guishots:-20}/; s/NETDEBUG/${netdebug:-3}/; s/GUIRIO/${guirio:-0}/; s/GUIAUDIO/${guiaudio:-0}/; s/GUIRESIZE/${guiresize:-}/; s/GUIFOCUS/${guifocus:-}/; s/KEEP/${keep:-0}/" "$root/rc/bin/termrc.local"
+sed -i "s/TICKS/${ticks:-100000}/; s/GUITIME/${guitime:-120}/; s/GUISHOTS/${guishots:-20}/; s/NETDEBUG/${netdebug:-3}/; s/GUIRIO/${guirio:-0}/; s/GUIAUDIO/${guiaudio:-0}/; s/GUIRESIZE/${guiresize:-}/; s/GUIFOCUS/${guifocus:-}/; s/KEEP/${keep:-0}/; s|SCRIPT|${script:-phase2/build.rc}|" "$root/rc/bin/termrc.local"
 
 accel=
 wrap=
