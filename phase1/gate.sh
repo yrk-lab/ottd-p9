@@ -39,6 +39,7 @@ play()
 	cat >"$d/openttd.cfg" <<-EOF
 	[misc]
 	savegame_format = none
+	prefer_sprite_font = true
 	[gui]
 	autosave = off
 	autosave_on_exit = true

@@ -29,6 +29,8 @@
 #	  and with guiresize=n is made 960x700 after n seconds; with
 #	  guifocus="t1 t2" a second window (at 860,40) is opened t1
 #	  seconds after rio starts, and the game's made current at t2.  With
+#	  fonts=truetype the game's TrueType fonts through FreeType (the
+#	  tests have the sprite font: their positions are measured with it);
 #	  guiaudio=1 the game has the Plan 9 sound and music drivers and
 #	  QEMU an Intel HDA card, whose output is work/9front-audio.wav;
 #	- a dedicated server: once it is up, the stock Linux build joins
@@ -74,11 +76,16 @@ done
 # what build.rc runs, and where it leaves the results
 rm -rf "${f9:?}"
 mkdir -p "$f9/ded"
-printf '[misc]\nsavegame_format = none\n[gui]\nautosave = off\n[network]\nserver_name = 9front\n' \
+printf '[misc]\nsavegame_format = none\nprefer_sprite_font = true\n[gui]\nautosave = off\n[network]\nserver_name = 9front\n' \
 	>"$f9/ded/openttd.cfg"
+# the tests' positions are measured with the sprite font; fonts=truetype
+# for FreeType's own (issue #20)
+sprite=true
+[ "${fonts:-}" = truetype ] && sprite=false
 if [ -n "${gui:-}" ]; then
 	mkdir -p "$f9/gui"
-	printf '[misc]\nsavegame_format = none\n[gui]\nautosave = off\n' >"$f9/gui/openttd.cfg"
+	# autosave_on_exit: in a game, the interrupt quits (with a save) instead of asking
+	printf '[misc]\nsavegame_format = none\nprefer_sprite_font = %s\n[gui]\nautosave = off\nautosave_on_exit = true\n' $sprite >"$f9/gui/openttd.cfg"
 fi
 
 mkdir -p "$root/n/ottd" "$root/n/ottdfs""$here/work/tu/obj.9front"

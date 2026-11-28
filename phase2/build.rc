@@ -132,6 +132,7 @@ fn play {
 	{
 		echo '[misc]'
 		echo 'savegame_format = none'
+		echo 'prefer_sprite_font = true'
 		echo '[gui]'
 		echo 'autosave = off'
 		echo 'autosave_on_exit = true'

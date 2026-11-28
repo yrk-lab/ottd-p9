@@ -30,7 +30,7 @@ o=$here/../phase2/work/tu/obj.linux
 c=$here/work/run
 mkdir -p "$c/lib/openttd"
 ln -sfn "$data/openttd/baseset" "$c/lib/openttd/baseset"
-[ -f "$c/openttd.cfg" ] || printf '[misc]\nsavegame_format = none\n[gui]\nautosave = off\n' >"$c/openttd.cfg"
+[ -f "$c/openttd.cfg" ] || printf '[misc]\nsavegame_format = none\nprefer_sprite_font = true\n[gui]\nautosave = off\n' >"$c/openttd.cfg"
 cd "$o" || exit 1
 if [ -z "${input:-}${shots:-}" ]; then
 	HOME=$c ./o.openttd -x -c "$c/openttd.cfg" -v plan9 -s "${sound:-null}" -m null "$@"
