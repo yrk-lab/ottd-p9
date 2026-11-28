@@ -180,6 +180,11 @@ the work runs inline, as before).
   thread at once, a contended static), run by `../phase0/tu/test.sh` (goken, Linux) and on 9front through vmsh:
   the native build's output, 30 of 30 runs on Linux, 10 of 10 on 9front. OpenTTD: the gate is the same on
   goken, Linux (18 threads in 5000 ticks) and 9front; the GUI and the dedicated server run.
+- Names (issue #15): OpenTTD names its threads (`SetCurrentThreadName`: `ottd:savegame`, `ottd:linkgraph`...,
+  through `pthread_setname_np`); `tsetname` gives the name to the system. On 9front it is the process's args
+  (`/proc/n/args`, as libthread's threadsetname), which `ps -a` shows after the program's name in brackets, without
+  OpenTTD's prefix: `6.openttd [savegame]`; the shim's helpers name themselves `[audio]`, `[music]`, `[net]`.
+  With plan9port it is glibc's thread name (`ottd:savegame` in `/proc/pid/task/*/comm`).
 
 ## Web links (issue #13)
 

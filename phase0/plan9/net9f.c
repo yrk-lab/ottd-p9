@@ -20,6 +20,7 @@ stopall(void)
 }
 
 int	p9proc(void (*)(void*), void*);	/* thread9f.c */
+void	tsetname(char*);
 
 static void
 sockrun(void *a)
@@ -27,6 +28,7 @@ sockrun(void *a)
 	Sock *s;
 
 	s = a;
+	tsetname("net");
 	s->run(s);
 }
 

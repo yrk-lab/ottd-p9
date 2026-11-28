@@ -585,3 +585,16 @@ Next steps now (replace section 10's first two items):
   candidate follow-up). Test: survey9f.input clicks Preview at 75 s (cold-start title took ~50 s after a relink;
   the first try clicked at 18 s, before the title: console-only shots, not a bug), drags the scrollbar to the end.
   LESSON: never start run9front.sh while a VM runs: the second clears work/9f, then fails on the ports.
+- THREAD NAMES (#15, 2026-11-28): thread.h tsetname; thread_p9.c c_pthread_setname_np (self only) -> tsetname;
+  thread9f.c writes /proc/n/args, strips "ottd:" (9front shows "text [args]": 6.openttd [savegame]); threadp9p.c
+  glibc pthread_setname_np (15 chars); helpers audio9f.c "audio"/"music", net9f.c "net" (user's choice of
+  brackets-style names). Linux check: o.openttd -D + "save" on stdin -> ottd:savegame thread (NB obj.linux/openttd
+  is a stale pre-rename binary: use o.openttd). Found + filed: #21 helpers outlive the program (GUI [audio]
+  [music] + dmid; ded [net]) - killthreads knows only tstart threads, exits() runs only the exiting pid's atexit;
+  #22 9front dedicated server ignores stdin console. #20 FreeType: native lib, clang-side 32-bit FT_Long headers.
+  #15 checks: 9front ps -a shows 6.openttd [audio] [music] [net] (9front prints "text [args]" once args are
+  written). OpenTTD-made threads named only seen on Linux (save via stdin: ottd:savegame); on 9front nothing short
+  starts one: ded autosave_interval=1 didn't fire in 150 s, stdin console dead (#22), regression save under
+  -v null starts NO threads on Linux either (the "18 threads" was another scenario). 9front scripts in VM: no
+  printf command; quote words with '=' (null:ticks=...); vmsh's namespace lacks build.rc's binds (bind
+  build-p9/{lang,...} onto obj.9front/ for a manual run).

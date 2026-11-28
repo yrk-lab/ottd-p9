@@ -192,9 +192,12 @@ c_pthread_self(void)
 	return (uvlong)cur();
 }
 
+/* the program names only itself (SetCurrentThreadName) */
 int
-c_pthread_setname_np(uvlong, char*)
+c_pthread_setname_np(uvlong id, char *name)
 {
+	if((Thread*)id == cur())
+		tsetname(name);
 	return 0;
 }
 

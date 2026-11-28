@@ -21,6 +21,9 @@ int	semdown(int *s, vlong ms);
 int	tcas(int *p, int old, int new);
 int	tadd(int *p, int v);
 
+/* name the calling thread where the system shows one (ps -a) */
+void	tsetname(char *name);
+
 /* let another thread run */
 void	tyield(void);
 

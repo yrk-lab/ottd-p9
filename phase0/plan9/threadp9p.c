@@ -11,6 +11,7 @@
 #include <pthread.h>
 #include <sched.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/syscall.h>
 #include <time.h>
 #include <unistd.h>
@@ -128,4 +129,15 @@ vlong
 tnow(int clock)
 {
 	return now(clock);
+}
+
+/* glibc's name, which ps and top show: at most 15 bytes */
+void
+tsetname(char *name)
+{
+	char buf[16];
+
+	strncpy(buf, name, sizeof buf - 1);
+	buf[sizeof buf - 1] = 0;
+	pthread_setname_np(pthread_self(), buf);
 }

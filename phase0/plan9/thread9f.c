@@ -449,3 +449,25 @@ __atomic_store_1(uchar *p, uchar v, int)
 {
 	byteop(p, v, 0);
 }
+
+/*
+ * The process's args, as libthread's threadsetname: ps -a shows them
+ * after its name in brackets, "6.openttd [savegame]".  OpenTTD's
+ * prefix (ottd:savegame) says no more than that.
+ */
+void
+tsetname(char *name)
+{
+	char buf[32];
+	int fd;
+
+	if(strncmp(name, "ottd:", 5) == 0)
+		name += 5;
+
+	snprint(buf, sizeof buf, "/proc/%d/args", getpid());
+	fd = open(buf, OWRITE);
+	if(fd < 0)
+		return;
+	write(fd, name, strlen(name));
+	close(fd);
+}

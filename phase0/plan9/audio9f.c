@@ -101,6 +101,7 @@ finish(Ring *g)
 }
 
 int	p9proc(void (*)(void*), void*);	/* thread9f.c */
+void	tsetname(char*);
 
 static void
 ringrun(void *a)
@@ -154,6 +155,7 @@ writer(Ring *g)
 	ulong buf[Chunk];
 	int n;
 
+	tsetname("audio");
 	while(!dead(g)){
 		n = take(g, buf, Chunk);
 		if(n == 0){
@@ -222,6 +224,7 @@ reader(Ring *g)
 	ulong buf[Chunk];
 	int n, m, o;
 
+	tsetname("music");
 	while(!dead(g)){
 		n = read(g->fd, buf, sizeof buf);
 		if(n <= 0)
