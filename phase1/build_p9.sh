@@ -5,7 +5,10 @@
 #	the game with its GUI and the Plan 9 video driver (patches/
 #	plan9-video.patch; its draw shim is ../phase0/plan9/draw_none.c, the
 #	sound and music drivers' (plan9-audio.patch) audio_none.c, web
-#	links' (plan9-plumb.patch) plumb_none.c
+#	links' (plan9-plumb.patch) plumb_none.c, FreeType's
+#	freetype_none.c (the headers are ft9.sh's, in Plan 9's data
+#	model, which only 9front's native library matches; layout9.c's
+#	output, work/layout9.clang, is what build.rc compares 6c's with)
 #	here, so it does not start on Linux), libraries as build_ref.sh,
 #	from src-p9 (src-ref with patches/series applied; prep.sh), into
 #	work/build-p9.
@@ -33,6 +36,12 @@ clang-17 -O1 -c "$top/nothreads.c" -o "$work/nothreads.o"
 clang-17 -O1 -c "$top/../phase0/plan9/draw_none.c" -o "$work/draw_none.o"
 clang-17 -O1 -c "$top/../phase0/plan9/audio_none.c" -o "$work/audio_none.o"
 clang-17 -O1 -c "$top/../phase0/plan9/plumb_none.c" -o "$work/plumb_none.o"
+"$top/ft9.sh" >/dev/null
+clang-17 -w -I"$work/ft9/include" -o "$work/layout9" "$top/layout9.c"
+"$work/layout9" >"$work/layout9.clang"
+clang-17 -O1 -c "$top/../phase0/plan9/freetype_none.c" -o "$work/freetype_none.o"
+rm -f "$work/libfreetype_none.a"
+ar rcs "$work/libfreetype_none.a" "$work/freetype_none.o"
 cmake -S "$p9" -B "$b" -G Ninja -Wno-dev \
 	-DCMAKE_BUILD_TYPE=Release \
 	-DCMAKE_C_COMPILER=clang-17 \
@@ -43,7 +52,10 @@ cmake -S "$p9" -B "$b" -G Ninja -Wno-dev \
 	-DOPTION_PLAN9=ON \
 	-DPERSONAL_DIR=lib/openttd \
 	-DGLOBAL_DIR=/sys/lib/openttd \
-	-DCMAKE_DISABLE_FIND_PACKAGE_Freetype=ON \
+	-DCMAKE_DISABLE_FIND_PACKAGE_Freetype=OFF \
+	-DFREETYPE_INCLUDE_DIR_ft2build="$work/ft9/include" \
+	-DFREETYPE_INCLUDE_DIR_freetype2="$work/ft9/include" \
+	-DFREETYPE_LIBRARY="$work/libfreetype_none.a" \
 	-DCMAKE_DISABLE_FIND_PACKAGE_Fontconfig=ON \
 	-DCMAKE_DISABLE_FIND_PACKAGE_Harfbuzz=ON \
 	-DCMAKE_DISABLE_FIND_PACKAGE_ICU=ON \

@@ -1,6 +1,7 @@
 #!/bin/bash
 # setup
-#	Fetch the OpenTTD release, zlib and xz (translated with it), the
+#	Fetch the OpenTTD release, zlib and xz (translated with it),
+#	FreeType (built natively on 9front: ../phase3/README.md), the
 #	OpenGFX, OpenSFX and OpenMSX base sets, and make the stock source
 #	tree src-ref.  Both src-ref and the patched
 #	src-p9 are exported without .git and share one .ottdrev, so the
@@ -33,6 +34,10 @@ fi
 
 if [ ! -d "$xz" ]; then
 	git -c advice.detachedHead=false clone -q --depth 1 --branch "$xztag" https://github.com/tukaani-project/xz.git "$xz"
+fi
+
+if [ ! -d "$freetype" ]; then
+	git -c advice.detachedHead=false clone -q --depth 1 --branch "$fttag" https://github.com/freetype/freetype.git "$freetype"
 fi
 
 # the free sound and music sets, as OpenGFX: name-version-all.zip

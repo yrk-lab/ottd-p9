@@ -3,7 +3,10 @@
 #	Run at boot by run9front.sh, with the repository mounted on
 #	/n/ottd.  Builds work/tu (../phase0/tu/build.sh's tree, translated
 #	on Linux) with mk SYS=9front: only what changed since the last
-#	boot is compiled, objects in work/tu/obj.9front.  Then, for what
+#	boot is compiled, objects in work/tu/obj.9front; first FreeType,
+#	which it links, by FreeType's own mkfile (../phase1/work/freetype,
+#	issue #20), and its structs' layout against the translation's
+#	(../phase1/layout9.c: "freetype: layout same").  Then, for what
 #	run9front.sh prepared in work/9f (the results go there too):
 #	- runs each socket test (work/nettest/name.c) against the
 #	  runtime's objects, output in 9f/name.out;
@@ -26,6 +29,28 @@ o=$tu/obj.9front
 out=$r/phase2/work/9f
 data=$r/phase1/work
 date
+
+# FreeType, natively (its own mkfile: libfreetype.a6 in its tree), and
+# its structs as 6c lays them out against what the translation was
+# compiled with (../phase1/ft9.sh, layout9.c: work/layout9.clang)
+ft=$data/freetype
+if(test -f $ft/mkfile){
+	if(! @{cd $ft && mk >$out/ft.log >[2=1]}){
+		echo freetype mk FAILED
+		grep -v '^warning' $out/ft.log | tail -20 | cut -c1-300
+		exit freetype
+	}
+	ftflags=(-p -I$ft/builds/plan9 -I$ft/include '-DFT_CONFIG_OPTIONS_H=<p9ftopt.h>' '-DFT_CONFIG_STANDARD_LIBRARY_H=<p9lib.h>')
+	6c $ftflags -o /tmp/layout9.6 $r/phase1/layout9.c >>$out/ft.log >[2=1] &&
+		6l -o /tmp/layout9 /tmp/layout9.6 >>$out/ft.log >[2=1] &&
+		/tmp/layout9 >$out/layout9.6c
+	if(cmp -s $out/layout9.6c $data/layout9.clang)
+		echo freetype: layout same
+	if not{
+		echo freetype: layout DIFFERENT
+		diff $data/layout9.clang $out/layout9.6c | sed 20q
+	}
+}
 
 cd $tu
 if(! mk 'SYS=9front' >$out/mk.log >[2=1]){

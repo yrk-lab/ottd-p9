@@ -21,6 +21,8 @@ zlibtag=v1.3.1			# the system's version, so native and translated builds agree
 zlib=$work/zlib			# its sources, translated with the program
 xztag=v5.8.3			# liblzma: the system's version too
 xz=$work/xz			# its sources, translated with the program
+fttag=VER-2-15-0		# FreeType: the first release with a Plan 9 port (its mkfile)
+freetype=$work/freetype		# built natively on 9front; its headers in 6c's model for the translation
 
 PATH=/usr/lib/llvm-17/bin:$PATH
 

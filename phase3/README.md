@@ -230,3 +230,23 @@ opens the preview and drags its scrollbar to the end, where `info.os.memory` is 
 	ticks=100 gui=1 guitime=105 guishots="70 90 98" guiinput=../phase3/survey9f.input ../phase2/run9front.sh
 
 A binary just linked is read cold: the title may take 50 s to come up, so the input waits for it.
+
+## FreeType (issue #20)
+
+OpenTTD draws its text with TrueType fonts through FreeType: its own fonts (OpenTTD-Sans, -Small, -Serif, -Mono in
+the base set directory, in the bundle) unless sprite fonts are preferred. FreeType is not translated: since 2.15.0
+it builds on Plan 9 with its own mkfile (`builds/plan9`), and build.rc makes `libfreetype.a6` in
+`../phase1/work/freetype` (setup.sh fetches the release), which 9front's link takes.
+
+The translated code meets it only at FreeType's calls and structs, and there the two compilers disagree: 6c's
+`long` is 32 bits on amd64, and FreeType's Plan 9 configuration makes `size_t` and `ptrdiff_t` 32 bits too, while
+clang's x86-64 `long` is 64. LLVM IR has no `long`, so it is enough that what the translation is compiled against
+says what 6c means: `../phase1/ft9.sh` makes FreeType's headers in Plan 9's data model (every `long` not part of
+`long long` is `int`, `size_t` `unsigned int`, `FT_SIZEOF_LONG` 4, the native build's options) and build_p9.sh
+compiles the game against them. 6c also rounds every struct up to a multiple of 8 bytes: `FT_Size_Metrics` gets
+an explicit pad. `../phase1/layout9.c` prints the size of every struct OpenTTD reads and the offset of each field;
+build.rc compiles it with 6c and FreeType's flags and compares it with clang's output (`freetype: layout same`).
+
+goken, the Linux fast loop and build-p9's native link cannot use any FreeType through these headers: they link
+`../phase0/plan9/freetype_none.c`, whose `FT_Init_FreeType` fails, and the game keeps its sprite fonts, as before.
+Checked on 9front: the title screen in TrueType (`screens/9front-truetype.png`), the gate the same.

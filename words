@@ -613,3 +613,12 @@ Next steps now (replace section 10's first two items):
   reader ("cons") of fd 0 into an 8K ring on first ask; c_select fd 0 with no socket -> stdinready(); libc_p9.c
   cgetc fills cin via c_stdinread (function pointer, nil on goken = read(2)). EOF -> always ready, getline fails:
   as Unix with </dev/null. Checked: piped save x2 + quit -> both saved, quit, nothing left; [cons] in ps -a.
+- FREETYPE (#20, 2026-11-28): FreeType 2.15.0 (VER-2-15-0) has a Plan 9 port (mkfile, builds/plan9/p9lib.h:
+  size_t=ulong, ptrdiff_t=int); setup.sh clones it to phase1/work/freetype; build.rc mk's libfreetype.a6 there
+  (~1.5 min first time) and compares layout9.c 6c vs clang (work/layout9.clang). ft9.sh: copy include/, sed long->int
+  (not long long), size_t->unsigned int, LONG/ULONG limits, ft_ptrdiff_t int, FT_SIZEOF_LONG 4, ftoption like
+  p9ftopt (no zlib/LZW), FT_Size_Metrics pad6c_ (6c rounds structs to 8: 28 vs 32); writes only if changed.
+  build_p9.sh: CMAKE_DISABLE_FIND_PACKAGE_Freetype=OFF (cache kept ON!), FREETYPE_INCLUDE_DIR_{ft2build,freetype2}
+  = work/ft9/include, FREETYPE_LIBRARY = libfreetype_none.a. tu: 9front LIBS=libfreetype.a6 path; goken/linux
+  RUNTIME + freetype_none. OpenTTD's own OpenTTD-*.ttf in baseset = default fonts (prefer_sprite_font false).
+  User: p9p fast loop stays on the stub (no FreeType there). Full gate same with FreeType compiled in.
