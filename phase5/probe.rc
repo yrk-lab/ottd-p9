@@ -1,0 +1,10 @@
+#!/bin/rc
+# probe: what 9legacy is, for run9legacy.sh's first boots
+echo sysname `{cat /dev/sysname}
+echo cputype $cputype objtype $objtype
+cat /dev/swap
+ls '#9'
+ls /dev | sed 30q | tr '\012' ' '
+echo
+ls -d /dev/kbd /dev/wctl /dev/audio /dev/draw /dev/mouse >[2=1]
+echo 'void main(void){}' >/tmp/t.c && 6c -o /tmp/t.6 /tmp/t.c && 6l -o /tmp/t /tmp/t.6 && /tmp/t && echo 6c works
