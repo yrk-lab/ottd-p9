@@ -7,8 +7,10 @@
 #	host (work/root, from 9legacy.iso: fetch.sh) over virtio9p (#9/0),
 #	and this repository a second virtio9p device (#9/1), mounted on
 #	/n/ottd by the tree's termrc.local, which then runs $script (rc,
-#	a path in the repository; default: say what the system is) and
-#	reboots, which ends QEMU.  Its output is work/out.txt; the
+#	a path in the repository; default: say what the system is; with
+#	$ticks, default 100) and reboots, which ends QEMU; saves the script
+#	leaves in work/9l (build9l.rc: the gate's) are compared with the
+#	reference build's.  Its output is work/out.txt; the
 #	console's, work/console.log.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
@@ -17,13 +19,19 @@ w=$here/work
 root=$w/root
 [ -f "$root/amd64/9k10f.elf" ] || { echo "run9legacy: no $root: run fetch.sh" >&2; exit 1; }
 script=${script:-phase5/probe.rc}
+# what build9l.rc writes in: the translated tree's objects, and a
+# FreeType tree of its own (sources only: 9front's objects are another
+# compiler's)
+mkdir -p "$repo/phase2/work/tu/obj.9legacy"
+rsync -a --exclude '*.[6]' --exclude '*.a6' --exclude '*.6l' --exclude '*.a6l' --exclude p9ftopt.h \
+	"$repo/phase1/work/freetype/" "$repo/phase1/work/freetype9l/"
 rm -f "$w/out.txt"
 cat >"$root/rc/bin/termrc.local" <<EOF
 #!/bin/rc
 # written by run9legacy.sh
 bind -a '#9' /dev
 mount -c '#9/1' /n/ottd
-rc /n/ottd/$script >/n/ottd/phase5/work/out.txt >[2=1]
+ticks=${ticks:-100} rc /n/ottd/$script >/n/ottd/phase5/work/out.txt >[2=1]
 echo reboot >'#c/reboot'
 EOF
 # KVM where this user may use it (as run9front.sh), else TCG
@@ -46,3 +54,16 @@ $wrap timeout ${timeout:-600} qemu-system-x86_64 $accel -m 4G -smp 2 -no-reboot 
 	-display none -serial file:"$w/console.log" || true
 [ -f "$w/out.txt" ] || { echo "run9legacy: no output; console in $w/console.log" >&2; tail -20 "$w/console.log" >&2; exit 1; }
 cat "$w/out.txt"
+# build9l.rc's gate saves, normalized, against the reference build's
+# (../phase1/gate.sh), as run9front.sh compares 9front's
+if ls "$w"/9l/*.sav >/dev/null 2>&1; then
+	echo "== gate"
+	o=$repo/phase1/out/9legacy
+	rm -rf "${o:?}"
+	mkdir -p "$o"
+	for s in world regression; do
+		[ -f "$w/9l/$s.sav" ] &&
+			python3 "$repo/phase1/savenorm.py" "$w/9l/$s.sav" "$o/$s.sav"
+	done
+	"$repo/phase1/gate.sh" cmp ref 9legacy || exit 1
+fi
