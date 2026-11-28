@@ -13,6 +13,13 @@ hand-written C shim on libdraw through ints and pointers only (`../phase0/plan9/
   nothing (devdraw does not say);
 - `draw_none.c`: for builds with no draw device (goken), `p9draw_init` fails and the game picks another driver.
 
+The mouse wheel (issue #37): a wheel step is a mouse message with button 8 (up) or 16 (down) set, with no release
+of its own, and Plan 9's kernel queues a mouse message only when the buttons change: steps in a row come as messages
+with the button still set. The driver counts each such message; it counted transitions, and steps in a row without
+motion between were lost (moving the mouse while scrolling hid it). The test VM's mouse is QEMU's PS/2 one as an
+IntelliMouse (`mouseport=ps2intellimouse`), which has the wheel; `wheel9f.input` sends two steps with no motion
+between, and the view zooms two levels (`screens/9front-wheel.png`).
+
 How keys reach the game: the shim turns the keyboard into events (P9Event). On 9front `kbd9f.c` reads
 /dev/kbd: a `c` message (a character typed, repeated while held) is P9Echar; `k` and `K` (the set of keys held,
 after one went down or up) become P9Ekeydown and P9Ekeyup. With plan9port, `kbdp9p.c` has event(2)'s characters

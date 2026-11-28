@@ -1,6 +1,6 @@
 --- src-ref/src/video/plan9_v.cpp	1970-01-01 01:00:00.000000000 +0100
 +++ src-p9/src/video/plan9_v.cpp	1970-01-01 01:00:00.000000000 +0100
-@@ -0,0 +1,389 @@
+@@ -0,0 +1,392 @@
 +/*
 + * This file is part of OpenTTD.
 + * OpenTTD is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 2.
@@ -306,8 +306,11 @@
 +				_right_button_down = (e.buttons & 4) != 0;
 +				if (_right_button_down) _right_button_clicked = true;
 +			}
-+			if ((diff & 8) && (e.buttons & 8)) _cursor.wheel--;
-+			if ((diff & 16) && (e.buttons & 16)) _cursor.wheel++;
++			/* A wheel step is a message with its button set (8 up, 16 down), with no release of its own:
++			 * Plan 9's kernel queues a mouse message only when the buttons change, so steps in a row
++			 * come as messages with the button still set. Each one counts, not the transitions. */
++			if (e.buttons & 8) _cursor.wheel--;
++			if (e.buttons & 16) _cursor.wheel++;
 +			prev_buttons = e.buttons;
 +
 +			if (_cursor.UpdateCursorPosition(e.x, e.y)) p9draw_warp(_cursor.pos.x, _cursor.pos.y);

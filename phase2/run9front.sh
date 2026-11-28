@@ -152,7 +152,7 @@ fwd="hostfwd=tcp:127.0.0.1:13979-:3979,hostfwd=udp:127.0.0.1:13979-:3979"
 fwd="$fwd,hostfwd=tcp:127.0.0.1:17019-:17019,hostfwd=tcp:127.0.0.1:17564-:17564"
 $wrap timeout ${timeout:-7200} qemu-system-x86_64 $accel -m 4G -smp 2 -nographic -no-reboot \
 	-kernel "$nine/9pc64" \
-	-append "nobootprompt=tcp fs=$fs auth=$fs console=0 b115200 user=glenda p9test=ottd vgasize=1024x768x32 monitor=vesa mouseport=ps2 $audioconf" \
+	-append "nobootprompt=tcp fs=$fs auth=$fs console=0 b115200 user=glenda p9test=ottd vgasize=1024x768x32 monitor=vesa mouseport=ps2intellimouse $audioconf" \
 	-netdev "user,id=net0,guestfwd=tcp:$fs:564-cmd:$u9fs,guestfwd=tcp:$fs:565-cmd:$u9repo,$fwd" \
 	-device e1000,netdev=net0 $audiodev \
 	-monitor "unix:$here/work/qemu.mon,server=on,wait=off" \
