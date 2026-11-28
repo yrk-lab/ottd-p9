@@ -9,7 +9,7 @@
 #	/n/ottd by the tree's termrc.local, which then runs $script (rc,
 #	a path in the repository; default: say what the system is; with
 #	$ticks, default 100) and reboots, which ends QEMU; saves the script
-#	leaves in work/9l (build9l.rc: the gate's) are compared with the
+#	leaves in work/out (build.rc: the gate's) are compared with the
 #	reference build's.  Its output is work/out.txt; the
 #	console's, work/console.log.
 set -euo pipefail
@@ -19,12 +19,9 @@ w=$here/work
 root=$w/root
 [ -f "$root/amd64/9k10f.elf" ] || { echo "run9legacy: no $root: run fetch.sh" >&2; exit 1; }
 script=${script:-phase5/probe.rc}
-# what build9l.rc writes in: the translated tree's objects, and a
-# FreeType tree of its own (sources only: 9front's objects are another
-# compiler's)
+# what build.rc writes in: the translated tree's objects (FreeType's go
+# in its own tree; 9front builds in a copy, freetype9f)
 mkdir -p "$repo/phase2/work/tu/obj.9legacy" "$repo/phase0/out/tu/t2/obj.9legacy"
-rsync -a --exclude '*.[6]' --exclude '*.a6' --exclude '*.6l' --exclude '*.a6l' --exclude p9ftopt.h \
-	"$repo/phase1/work/freetype/" "$repo/phase1/work/freetype9l/"
 rm -f "$w/out.txt"
 cat >"$root/rc/bin/termrc.local" <<EOF
 #!/bin/rc
@@ -39,7 +36,7 @@ ip/ipconfig >[2]/dev/null
 ip/ipconfig loopback /dev/null 127.1
 # a shell for ../phase2/vmsh (host port 17019), as run9front.sh's
 aux/listen1 -t 'tcp!*!17019' /bin/rc &
-ticks=${ticks:-100} gui=${gui:-0} guirio=${guirio:-0} guifocus=(${guifocus:-}) guitime=${guitime:-60} guishots=(${guishots:-30}) rc /n/ottd/$script >/n/ottd/phase5/work/out.txt >[2=1]
+ticks=${ticks:-100} gui=${gui:-0} guiaudio=${guiaudio:-0} guirio=${guirio:-0} guifocus=(${guifocus:-}) guitime=${guitime:-60} guishots=(${guishots:-30}) rc /n/ottd/$script >/n/ottd/phase5/work/out.txt >[2=1]
 if(! ~ ${keep:-0} 1)
 	echo reboot >'#c/reboot'
 EOF
@@ -67,7 +64,7 @@ qemu=$!
 
 # input for the GUI (guiinput=script), through QEMU's monitor, as
 # run9front.sh sends it: "seconds command" lines from when the window
-# is up (build9l.rc's gui/shot.ready); "at x y" moves the mouse there
+# is up (build.rc's gui/shot.ready); "at x y" moves the mouse there
 # (PS/2 is relative: to the corner, then in steps), "click" clicks,
 # anything else is a monitor command (sendkey right)
 mon()
@@ -88,7 +85,7 @@ move()
 play()
 {
 	local start now t cmd
-	while kill -0 $qemu 2>/dev/null && [ ! -f "$w/9l/gui/shot.ready" ]; do
+	while kill -0 $qemu 2>/dev/null && [ ! -f "$w/out/gui/shot.ready" ]; do
 		sleep 1
 	done
 	start=$(date +%s.%N)
@@ -114,23 +111,23 @@ play()
 		esac
 	done <"$guiinput"
 }
-rm -f "$w/9l/gui/shot.ready"
+rm -f "$w/out/gui/shot.ready"
 player=
 if [ -n "${guiinput:-}" ]; then
 	guiinput=$(realpath "$guiinput")
 	play >"$w/input.log" 2>&1 &
 	player=$!
 fi
-# a dedicated server (build9l.rc says when it is up, in work/9l/ded):
+# a dedicated server (build.rc says when it is up, in work/out/ded):
 # the stock Linux build joins it through the port forward for
 # $clienttime seconds, as run9front.sh's client does
 p1=$repo/phase1/work
-rm -f "$w/9l/ded/ready" "$w/9l/ded/done"
+rm -f "$w/out/ded/ready" "$w/out/ded/done"
 client=
-while kill -0 $qemu 2>/dev/null && [ ! -f "$w/9l/ded/ready" ]; do
+while kill -0 $qemu 2>/dev/null && [ ! -f "$w/out/ded/ready" ]; do
 	sleep 5
 done
-if [ -f "$w/9l/ded/ready" ]; then
+if [ -f "$w/out/ded/ready" ]; then
 	c=$w/client
 	rm -rf "$c"
 	mkdir -p "$c/data/openttd" "$c/config"
@@ -141,28 +138,28 @@ if [ -f "$w/9l/ded/ready" ]; then
 		"$p1/build-ref/openttd" -n 127.0.0.1:13979 -x -c "$c/openttd.cfg" \
 		-v null:ticks=1000000000 -s null -m null -d net=3 >"$c/log" 2>&1 || true	# timeout ends it
 	client=$c/log
-	touch "$w/9l/ded/done"
+	touch "$w/out/ded/done"
 fi
 wait $qemu || true
 [ -z "$player" ] || kill $player 2>/dev/null
 [ -f "$w/out.txt" ] || { echo "run9legacy: no output; console in $w/console.log" >&2; tail -20 "$w/console.log" >&2; exit 1; }
 cat "$w/out.txt"
-# build9l.rc's gate saves, normalized, against the reference build's
+# build.rc's gate saves, normalized, against the reference build's
 # (../phase1/gate.sh), as run9front.sh compares 9front's
-if ls "$w"/9l/*.sav >/dev/null 2>&1; then
+if ls "$w"/out/*.sav >/dev/null 2>&1; then
 	echo "== gate"
 	o=$repo/phase1/out/9legacy
 	rm -rf "${o:?}"
 	mkdir -p "$o"
 	for s in world regression; do
-		[ -f "$w/9l/$s.sav" ] &&
-			python3 "$repo/phase1/savenorm.py" "$w/9l/$s.sav" "$o/$s.sav"
+		[ -f "$w/out/$s.sav" ] &&
+			python3 "$repo/phase1/savenorm.py" "$w/out/$s.sav" "$o/$s.sav"
 	done
 	"$repo/phase1/gate.sh" cmp ref 9legacy || fail=1
 fi
 if [ -n "$client" ]; then
 	echo "== dedicated server"
-	srv=$w/9l/ded/log
+	srv=$w/out/ded/log
 	if grep -q 'has joined the game' "$srv" && grep -q 'has started a new company' "$srv" &&
 		! grep -qi 'desync' "$srv" "$client" && ! grep -q 'is dropped\|made an error' "$srv"; then
 		echo "client joined, stayed, no desync: PASS"
@@ -173,7 +170,7 @@ if [ -n "$client" ]; then
 		fail=1
 	fi
 fi
-# build9l.rc's stop: the program quit on the interrupt and left no
+# build.rc's stop: the program quit on the interrupt and left no
 # process behind (issue #21)
 if grep -q 'quit on interrupt\|did not quit\|killed by' "$w/out.txt"; then
 	echo "== stops"

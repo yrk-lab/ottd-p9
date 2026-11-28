@@ -20,6 +20,7 @@ void	p9audio_close(void);
  * the system's); whether it still plays; its next frames (the rest
  * silence)
  */
+int	p9music_open(void);	/* can music play here at all: 0, else -1 */
 int	p9music_play(char *file, char *bank, int rate);
 void	p9music_stop(void);
 int	p9music_playing(void);

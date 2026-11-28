@@ -2,7 +2,8 @@
 # bundle
 #	OpenTTD for 9front (or, with sys=9legacy, 9legacy) as one file,
 #	named for the game's version and the system:
-#	work/openttd-<version>-plan9-amd64.tgz, or -9legacy-amd64 (the version is
+#	work/openttd-<version>-9front-amd64.tgz, or -plan9-amd64 for 9legacy
+#	(Plan 9 from Bell Labs carried on; the version is
 #	the release's, ../phase1/work/ottdrev), holding the directory
 #	openttd/ with the binary as Plan 9 names it before it
 #	is installed (6.openttd), the data the game finds next to it (lang,
@@ -16,11 +17,11 @@
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 . "$here/../phase1/common.sh"
-# sys=9legacy: the binary build9l.rc built (../phase5/run9legacy.sh)
+# sys=9legacy: the binary build.rc built (../phase5/run9legacy.sh)
 sys=${sys:-9front}
 case $sys in
-9front)	name=plan9; title=9front; run=../phase2/run9front.sh ;;
-9legacy)	name=9legacy; title=9legacy; run="../phase5/run9legacy.sh (script=phase5/build9l.rc)" ;;
+9front)	name=9front; title=9front; run=../phase2/run9front.sh ;;
+9legacy)	name=plan9; title=9legacy; run="../phase5/run9legacy.sh (script=phase5/build.rc)" ;;
 *)	fatal "sys=$sys: 9front or 9legacy" ;;
 esac
 bin=$here/../phase2/work/tu/obj.$sys/6.openttd

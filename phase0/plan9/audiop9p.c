@@ -79,6 +79,13 @@ p9music_stop(void)
 {
 }
 
+/* no music here */
+int
+p9music_open(void)
+{
+	return -1;
+}
+
 int
 p9music_playing(void)
 {

@@ -16,7 +16,7 @@
  * p9runmain keeps for that.
  *
  * Semaphores are the kernel's (semacquire); the atomics are
- * atom_p9.c's, on the system's (atom9f.c, atom9l.c).  errno is each
+ * atom_p9.c's, on the system's (atom9f.c, atom9.c).  errno is each
  * thread's.
  *
  * The program's processes end together, as libthread's (threadexitsall)
@@ -86,13 +86,24 @@ __errno_location(void)
 
 char	Kinnote[] = "die openttd kin";
 
-/* end the program's other processes */
+/*
+ * end the program's other processes; only from one of them: a child
+ * fork(2)ed to exec a program (extmidi's player) has a copy of the
+ * list, and its _exit must not end the program
+ */
 void
 p9killkin(void)
 {
-	int i, me;
+	int i, me, ours;
 
+	/* without the lock: a forked child's copy may hold it forever */
 	me = getpid();
+	ours = me == mainpid;
+	for(i = 0; i < Nthreads && !ours; i++)
+		if(pids[i] == me)
+			ours = 1;
+	if(!ours)
+		return;
 	lock(&pidlk);
 	for(i = 0; i < Nthreads; i++)
 		if(pids[i] != 0 && pids[i] != me)

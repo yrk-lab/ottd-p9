@@ -9,7 +9,7 @@ t=/tmp/bt
 mkdir -p $t/home1 $t/home2
 6c -o /tmp/screenshot.6 /n/ottd/phase3/screenshot.c && 6l -o /tmp/screenshot /tmp/screenshot.6
 cd $t
-gunzip <$w/openttd-*-plan9-amd64.tgz | tar x
+gunzip <$w/openttd-*-9front-amd64.tgz | tar x
 echo unpacked: `{ls $t/openttd}
 
 # play name home cmd...: the game for 40 s, a screenshot at 35 s

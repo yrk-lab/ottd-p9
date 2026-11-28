@@ -335,6 +335,19 @@ p9music_stop(void)
 	unlock(&music);
 }
 
+/*
+ * Music needs the pipeline's programs: 9front has them, 9legacy (4th
+ * edition) has no games/dmid or games/opl3; without them the game takes
+ * its null music driver
+ */
+int
+p9music_open(void)
+{
+	if(access("/bin/games/dmid", AEXEC) < 0 || access("/bin/games/opl3", AEXEC) < 0)
+		return -1;
+	return 0;
+}
+
 int
 p9music_playing(void)
 {

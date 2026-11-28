@@ -2,13 +2,13 @@
  * The program's atomics on Plan 9 (9front and 9legacy alike): thread.h's
  * tcas and tadd, and the __atomic_* calls cbe makes of atomic
  * instructions, on a system's compare and swap (atom9f.c: 9front's
- * atomic(2); atom9l.c: 9legacy's cas32 and casp).
+ * atomic(2); atom9.c: 9legacy's cas32 and casp).
  */
 #include <u.h>
 #include <libc.h>
 #include "thread.h"
 
-/* atom9f.c, atom9l.c: 1 if *p was old and is now new */
+/* atom9f.c, atom9.c: 1 if *p was old and is now new */
 int	atcas32(u32int *p, u32int old, u32int new);
 int	atcas64(u64int *p, u64int old, u64int new);
 

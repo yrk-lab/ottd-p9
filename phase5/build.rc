@@ -1,25 +1,25 @@
 #!/bin/rc
-# build9l.rc - build the translated OpenTTD on 9legacy and run it
-#	Run by run9legacy.sh (script=phase5/build9l.rc), with this
+# build.rc - build the translated OpenTTD on 9legacy and run it
+#	Run by run9legacy.sh (script=phase5/build.rc), with this
 #	repository on /n/ottd, as ../phase2/build.rc on 9front:
 #	FreeType by its own mkfile with 9legacy's 6c (in a tree of its own,
-#	../phase1/work/freetype9l, which run9legacy.sh makes), then work/tu
+#	../phase1/work/freetype; 9front builds in a copy, freetype9f), then work/tu
 #	with mk SYS=9legacy
 #	(objects in work/tu/obj.9legacy), then openttd -h and the gate's
 #	scenarios (world, regression) for $ticks ticks (default 100), their
-#	saves in ../phase5/work/9l (run9legacy.sh compares them).  Output: what each step says.
+#	saves in ../phase5/work/out (run9legacy.sh compares them).  Output: what each step says.
 rfork en
 r=/n/ottd
 tu=$r/phase2/work/tu
 o=$tu/obj.9legacy
-out=$r/phase5/work/9l
+out=$r/phase5/work/out
 data=$r/phase1/work
 if(~ $#ticks 0)
 	ticks=100
 mkdir -p $out
 date
 
-ft=$data/freetype9l
+ft=$data/freetype
 if(! @{cd $ft && mk >$out/ft.log >[2=1]}){
 	echo freetype mk FAILED
 	grep -v '^warning' $out/ft.log | tail -20 | awk '{print substr($0, 1, 300)}'
@@ -187,6 +187,13 @@ if(~ $gui 1){
 	aux/vga -m vesa -l 1024x768x32 >$out/vga.log >[2=1]
 	echo vga status $status
 	6c -o /tmp/screenshot.6 $r/phase3/screenshot.c && 6l -o /tmp/screenshot /tmp/screenshot.6
+	# with $guiaudio 1, the game picks its sound and music drivers, as
+	# when one runs it: the Plan 9 ones where they can work (on amd64 no
+	# /dev/audio, and no MIDI player), else null (issue #29).  Named on
+	# the command line (-s plan9), a driver that cannot start stops the game
+	audio=(-s null -m null)
+	if(~ $guiaudio 1)
+		audio=()
 	d=$out/gui
 	rm -rf $d
 	mkdir -p $d/lib/openttd/baseset
@@ -209,7 +216,7 @@ if(~ $gui 1){
 		{
 			echo '#!/bin/rc'
 			echo 'home='$d' p9drawshot=/tmp/shot p9drawshotat=100000' \
-				$o/6.openttd -x -c $d/openttd.cfg -v plan9 -s null -m null -d '''driver=3''' '>'$d/log '>[2=1]'
+				$o/6.openttd -x -c $d/openttd.cfg -v plan9 $audio -d '''driver=3''' '>'$d/log '>[2=1]'
 		} >/tmp/game
 		{
 			echo '#!/bin/rc'
@@ -230,7 +237,7 @@ if(~ $gui 1){
 	}
 	# (4e's rc takes no if not after that block)
 	if(! ~ $guirio 1)
-		home=$d p9drawshot=/tmp/shot p9drawshotat=100000 $o/6.openttd -x -c $d/openttd.cfg -v plan9 -s null -m null -d 'driver=3' >$d/log >[2=1] &
+		home=$d p9drawshot=/tmp/shot p9drawshotat=100000 $o/6.openttd -x -c $d/openttd.cfg -v plan9 $audio -d 'driver=3' >$d/log >[2=1] &
 	pid=()
 	i=0
 	while(~ $#pid 0 && test $i -lt 120){

@@ -178,7 +178,7 @@ dmid's instrument bank: 9front comes with one, the GENMIDI lump of its shareware
 own namespace (`rfork n`), as dmid(1) does it; nothing is copied, and the game's namespace is left alone. A file `genmidi` in a base set directory
 takes its place, found the way the game finds its other data. Nothing to set.
 
-`bundle.sh` makes `work/openttd-<version>-plan9-amd64.tgz`: `openttd/` with `6.openttd`, the data it finds next to it, the
+`bundle.sh` makes `work/openttd-<version>-9front-amd64.tgz` (with `sys=9legacy`, `-plan9-amd64`: Plan 9 from Bell Labs carried on): `openttd/` with `6.openttd`, the data it finds next to it, the
 licences, OpenTTD's README.md, ours as README.Plan9 (`bundle.README.Plan9`: run in place, or install) and an
 mkfile (`bundle.mkfile`): `mk install` puts the binary in `$BIN` (default `$home/bin/$cputype`, as openttd) and
 the data in `$home/lib/openttd`; with `BIN` elsewhere (`mk BIN=/$cputype/bin install`) the data goes to

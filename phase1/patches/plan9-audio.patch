@@ -93,7 +93,7 @@
 +
 +#endif /* SOUND_PLAN9_H */
 --- src-ref/src/sound/CMakeLists.txt	2026-04-04 16:16:04.000000000 +0100
-+++ src-p9/src/sound/CMakeLists.txt	2026-11-27 17:09:31.118586664 +0000
++++ src-p9/src/sound/CMakeLists.txt	2026-11-27 17:11:07.599562321 +0000
 @@ -35,3 +35,9 @@
      null_s.cpp
      null_s.h
@@ -106,7 +106,7 @@
 +)
 --- src-ref/src/music/plan9_m.cpp	1970-01-01 01:00:00.000000000 +0100
 +++ src-p9/src/music/plan9_m.cpp	1970-01-01 01:00:00.000000000 +0100
-@@ -0,0 +1,91 @@
+@@ -0,0 +1,95 @@
 +/*
 + * This file is part of OpenTTD.
 + * OpenTTD is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 2.
@@ -136,6 +136,7 @@
 +#include "../safeguards.h"
 +
 +extern "C" {
++	int p9music_open(void);
 +	int p9music_play(char *file, char *bank, int rate);
 +	void p9music_stop(void);
 +	int p9music_playing(void);
@@ -160,6 +161,9 @@
 +
 +std::optional<std::string_view> MusicDriver_Plan9::Start(const StringList &)
 +{
++	/* No MIDI pipeline here (9legacy has no games/dmid and games/opl3): the null music driver instead. */
++	if (p9music_open() < 0) return "no MIDI player (games/dmid, games/opl3)";
++
 +	/* The rate is the Plan 9 sound driver's (44100 Hz, which games/opl3
 +	 * plays at), or the mixer's default when another sound driver runs:
 +	 * then the shim plays no song. */
@@ -236,8 +240,23 @@
 +
 +#endif /* MUSIC_PLAN9_H */
 --- src-ref/src/music/CMakeLists.txt	2026-04-04 16:16:04.000000000 +0100
-+++ src-p9/src/music/CMakeLists.txt	2026-11-27 17:09:31.119196964 +0000
-@@ -49,3 +49,9 @@
++++ src-p9/src/music/CMakeLists.txt	2026-11-28 09:13:26.416855645 +0000
+@@ -25,10 +25,13 @@
+         CONDITION WIN32
+     )
+ 
++    # Not on Plan 9: no external MIDI player there, and extmidi's child
++    # handling is POSIX's (kill, waitpid; Plan 9's libc waitpid waits for
++    # any child): the Plan 9 music driver or none
+     add_files(
+         extmidi.cpp
+         extmidi.h
+-        CONDITION UNIX
++        CONDITION UNIX AND NOT OPTION_PLAN9
+     )
+ 
+     add_files(
+@@ -49,3 +52,9 @@
      null_m.cpp
      null_m.h
  )

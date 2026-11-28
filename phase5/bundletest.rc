@@ -3,14 +3,14 @@
 # installed as its README says, in a fresh home in memory; the
 # installed game plays 100 ticks with the null video driver and saves
 # on exit, which says it found its data.  Run by run9legacy.sh
-# (script=phase5/bundletest9l.rc)
+# (script=phase5/bundletest.rc)
 rfork en
 ramfs
 w=/n/ottd/phase3/work
 t=/tmp/bt
 mkdir -p $t/home
 cd $t
-gunzip <$w/openttd-*-9legacy-amd64.tgz | tar x
+gunzip <$w/openttd-*-plan9-amd64.tgz | tar x
 echo unpacked: `{ls $t/openttd}
 home=$t/home
 cd $t/openttd

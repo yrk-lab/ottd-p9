@@ -89,6 +89,10 @@ if [ -n "${gui:-}" ]; then
 fi
 
 mkdir -p "$root/n/ottd" "$root/n/ottdfs""$here/work/tu/obj.9front"
+# FreeType for 9front builds in a copy of the tree, sources only: the
+# tree itself is 9legacy's (../phase5), whose objects are another compiler's
+rsync -a --exclude .git --exclude '*.6' --exclude '*.a6' --exclude p9ftopt.h \
+	"$repo/phase1/work/freetype/" "$repo/phase1/work/freetype9f/"
 cat >"$root/rc/bin/termrc.local" <<'RC'
 #!/bin/rc
 # termrc.local for phase2/run9front.sh: on a boot with p9test=ottd,
