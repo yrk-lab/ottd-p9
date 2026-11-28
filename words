@@ -622,3 +622,7 @@ Next steps now (replace section 10's first two items):
   = work/ft9/include, FREETYPE_LIBRARY = libfreetype_none.a. tu: 9front LIBS=libfreetype.a6 path; goken/linux
   RUNTIME + freetype_none. OpenTTD's own OpenTTD-*.ttf in baseset = default fonts (prefer_sprite_font false).
   User: p9p fast loop stays on the stub (no FreeType there). Full gate same with FreeType compiled in.
+- FP TRAPS (#27, 2026-11-28): user's Broken game: sys: fp: invalid operation in sq_getinteger: cbe's llvm_select_u64
+  evaluates both arms, (int64_t)(float) of an integer's bits -> CVTTSS2SQ invalid. 9front MXCSR 0x1900 traps
+  INVAL/ZDIV/OVFL (APE doesn't mask on amd64). Fix: thread9f.c p9runmain setfcr(getfcr() & ~(FPINVAL|FPZDIV|FPOVFL|
+  FPUNFL|FPINEX)) before forks. amd64 setfcr: set bit = trap enabled (it XORs into MXCSR's mask bits).

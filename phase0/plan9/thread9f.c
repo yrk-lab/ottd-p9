@@ -184,6 +184,13 @@ p9runmain(void (*f)(void*), void *arg)
 
 	mainpid = getpid();
 	noteinit();		/* before any fork: every process has the handler */
+	/*
+	 * IEEE's default, which C and C++ assume: an invalid operation, a
+	 * division by zero or an overflow makes a NaN or an infinity and
+	 * goes on.  Plan 9 starts a program with those trapping ("sys: fp:
+	 * invalid operation"); forks inherit the setting
+	 */
+	setfcr(getfcr() & ~(FPINVAL|FPZDIV|FPOVFL|FPUNFL|FPINEX));
 	slot = (Thread**)privalloc();
 	forkreq = (Fork**)privalloc();
 	if(slot == nil || forkreq == nil)

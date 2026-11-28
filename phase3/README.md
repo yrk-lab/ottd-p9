@@ -41,6 +41,12 @@ process, as rd's: the atexit table is shared memory here and too small for the t
 written with echo (`interrupt\n`) matched nothing and killed the main process outright, leaving its helpers
 running (`[audio]`, `[music]`, `[net]`: the names of #15 made them visible).
 
+Floating point (issue #27): 9front starts a program with the invalid-operation, divide-by-zero and overflow traps
+on (MXCSR 0x1900); C, C++ and LLVM assume they are off. LLVM speculates floating-point work freely: Squirrel's
+`tointeger` (`type == OT_FLOAT ? (SQInteger)_float(o) : _integer(o)`) became a select whose float-to-integer
+arm runs on an integer's bits too, and with the traps on that killed the game ("sys: fp: invalid operation") when
+an AI passed an integer. `p9runmain` masks them before anything is forked, as C's default environment has it.
+
 The dedicated server's console (issue #22) is its standard input: OpenTTD polls it with `select` and reads a line
 through `std::cin`. The runtime's `select` answers for sockets only, whose helpers read ahead; a read of fd 0 would
 block the game. So standard input gets a helper too (`../phase0/plan9/cons9f.c`, `[cons]` in `ps -a`), started the
