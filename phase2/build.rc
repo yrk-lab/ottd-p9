@@ -37,7 +37,7 @@ echo mk: `{grep -c '^6[cl] ' $out/mk.log} commands
 date
 
 # the socket tests, against the runtime
-rt=($o/rt_p9.6 $o/libc_p9.6 $o/os_p9.6 $o/os9f.6 $o/thread_p9.6 $o/thread9f.6 $o/net_p9.6 $o/net9f.6)
+rt=($o/rt_p9.6 $o/libc_p9.6 $o/os_p9.6 $o/os9f.6 $o/sig9f.6 $o/thread_p9.6 $o/thread9f.6 $o/net_p9.6 $o/net9f.6)
 for(f in `{ls $r/phase2/work/nettest/*.c >[2]/dev/null}){
 	n=`{basename $f .c}
 	if(6c -w -I$r/phase0/plan9/shim -o $out/$n.6 $f >$out/$n.log >[2=1] && 6l -o $out/$n.x $out/$n.6 $rt >>$out/$n.log >[2=1]){
@@ -70,9 +70,11 @@ fn personal {
 # stop pid: Plan 9's interrupt, which the game takes as a request to
 # quit (sig9f.c: the video driver asks to quit, the dedicated server
 # quits); if it is still there after 10 seconds, the note group is
-# killed (libdraw's event processes hold /dev/mouse)
+# killed (libdraw's event processes hold /dev/mouse).  A program that
+# quit has an exit status of its own, not the note's (this shell's
+# children; the game in rio is rio's), and leaves no process behind
 fn stop {
-	echo interrupt >/proc/$1/note >[2]/dev/null
+	echo -n interrupt >/proc/$1/note >[2]/dev/null
 	i=0
 	while(test -e /proc/$1 && test $i -lt 10){
 		sleep 1
@@ -82,8 +84,17 @@ fn stop {
 		echo $1 did not quit on interrupt: killed
 		echo kill >/proc/$1/notepg >[2]/dev/null
 	}
-	if not
-		echo quit on interrupt
+	if not{
+		wait $1
+		if(~ $status *interrupt*)
+			echo killed by the interrupt: $status
+		if not
+			echo quit on interrupt
+	}
+	sleep 2
+	left=`{ps | grep -c ' 6\.openttd$'}
+	if(! ~ $left 0)
+		echo left behind: $left processes
 }
 
 # play s: the Phase 1 gate scenario s (as phase1/gate.sh); the exit

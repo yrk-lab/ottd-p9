@@ -14,6 +14,12 @@
 
 static Ehtls	ehstate;
 
+/* no other processes to end with the program */
+void
+p9killkin(void)
+{
+}
+
 /* the program's main: no other stack needed */
 void
 p9runmain(void (*f)(void*), void *arg)

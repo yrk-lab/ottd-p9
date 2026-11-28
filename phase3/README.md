@@ -24,11 +24,24 @@ OpenTTD's quit hotkey, asks in a game and quits at once on the title screen, as 
 
 Plan 9's interrupt (the Del key where a program reads /dev/cons, as the console and rio's text windows do, or the
 note written to /proc/n/note) is the same request. The runtime makes notes signals (`../phase0/plan9/sig9f.c`:
-`interrupt` is SIGINT, `hangup` SIGHUP; other notes, kill among them, do as always), the video driver takes SIGINT
-as a quit request (it asks in a game, quits on the title screen), and the dedicated server's own SIGINT handler
-quits it. In the game's window Del stays OpenTTD's key (close the windows): the game reads /dev/kbd, so rio passes
-it on. build.rc stops the GUI game and the dedicated server with an interrupt (killing the note group only if
-one does not quit within 10 seconds): both quit on it. With plan9port, SIGINT (Ctrl-C) does the same. Esc, for example, is rune 0x1B,
+`interrupt`, with or without the newline `echo` adds, is SIGINT, `hangup` SIGHUP, a write on a closed pipe SIGPIPE;
+other notes, kill among them, do as always), the video driver takes SIGINT as a quit request (it asks in a game,
+quits on the title screen), and the dedicated server's own SIGINT handler quits it. In the game's window Del stays
+OpenTTD's key (close the windows): the game reads /dev/kbd, so rio passes it on. build.rc stops the GUI game and
+the dedicated server with an interrupt (killing the note group only if one does not quit within 10 seconds) and
+checks that each quit on it (an exit status of its own, not the note's) and left no process behind
+(run9front.sh's "stops"). With plan9port, SIGINT (Ctrl-C) does the same.
+
+The program's processes end together (issue #21), as libthread's (threadexitsall) and rd's and vncv's do: every
+process thread9f.c forks, threads and the shim's helpers alike, is in one list; when the program exits (`c_exit`,
+`_exit`, main's `exits`) or a process dies of a note nobody takes, the others are sent a note of their own ("die
+openttd kin"), which ends each quietly, and a helper is stopped alone the same way. The note handler is set in
+`p9runmain` before anything is forked, as libthread's main does, so every process has it. Not an `atexit` in each
+process, as rd's: the atexit table is shared memory here and too small for the threads. Until this, an interrupt
+written with echo (`interrupt\n`) matched nothing and killed the main process outright, leaving its helpers
+running (`[audio]`, `[music]`, `[net]`: the names of #15 made them visible).
+
+Esc, for example, is rune 0x1B,
 `WKC_ESC`: in the game it cancels the tool in hand (the main toolbar's "reset_object_to_place" hotkey), in a query
 or a text box it cancels, and it closes the load/save dialog and the high scores; it does not close other windows
 (Delete does). In the load/save dialog it takes a second press, as in the stock game (checked against a Windows

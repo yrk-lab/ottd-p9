@@ -2630,6 +2630,8 @@ wmemchr(int *s, int c, uvlong n)
 	return nil;
 }
 
+void	p9killkin(void);	/* thread9f.c; thread_none.c */
+
 /*
  * Process exit: flush stdout and turn the C status into an exits(2) string.
  * The program's main is renamed c_main, so its return value becomes the status.
@@ -2641,6 +2643,7 @@ c_exit(int status)
 	char buf[16];
 
 	cflush(&cout);
+	p9killkin();	/* the program's other processes end with it */
 	if(status == 0)
 		exits(nil);
 	snprint(buf, sizeof buf, "%d", status);

@@ -281,4 +281,13 @@ else
 	[ -n "$client" ] && tail -10 "$client"
 	fail=1
 fi
+
+# build.rc's stop: each program quit on the interrupt and left no
+# process behind (issue #21)
+echo "== stops"
+if grep -E 'killed by the interrupt|left behind|did not quit' "$f9/results.txt"; then
+	fail=1
+else
+	echo "quit on interrupt, nothing left behind: PASS"
+fi
 exit $fail

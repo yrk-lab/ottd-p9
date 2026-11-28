@@ -354,11 +354,14 @@ c_strerror(int e)
  * Process.
  */
 
+void	p9killkin(void);	/* thread9f.c; thread_none.c */
+
 void
 _exit(int status)
 {
 	char buf[16];
 
+	p9killkin();
 	if(status == 0)
 		_exits(nil);
 	snprint(buf, sizeof buf, "%d", status);

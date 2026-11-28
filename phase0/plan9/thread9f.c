@@ -16,8 +16,16 @@
  * p9runmain keeps for that.
  *
  * Semaphores are the kernel's (semacquire), atomics atomic(2).  errno
- * is each thread's.  At exit the other threads are stopped: they
- * would outlive the program.
+ * is each thread's.
+ *
+ * The program's processes end together, as libthread's (threadexitsall)
+ * and rd's and vncv's do: every process forked here is listed, and
+ * when the program exits (c_exit, _exit, or main's exits: p9killkin)
+ * or a process dies of a note nobody takes (sig9f.c, whose handler
+ * every process has from p9runmain on), the others are sent Kinnote,
+ * which ends them quietly.  A helper is stopped alone the same way
+ * (p9stopproc).  Not by atexit in each process: Plan 9's atexit table
+ * is shared memory here, and too small for the threads.
  */
 #include <u.h>
 #include <libc.h>
@@ -51,12 +59,14 @@ struct Fork
 };
 
 void	**privalloc(void);
+void	noteinit(void);		/* sig9f.c */
 int	*threaderrno(void);	/* thread_p9.c */
 
 static Thread	**slot;		/* per process: the thread */
 static Fork	**forkreq;	/* per process: its request */
 static jmp_buf	forkpoint;	/* in p9runmain's frame, on each process's private stack */
-static int	pids[Nthreads];
+static int	pids[Nthreads];	/* the processes forked here */
+static int	mainpid;
 static Lock	pidlk;
 
 Thread*
@@ -73,8 +83,11 @@ __errno_location(void)
 	return threaderrno();
 }
 
-static void
-killthreads(void)
+char	Kinnote[] = "die openttd kin";
+
+/* end the program's other processes */
+void
+p9killkin(void)
 {
 	int i, me;
 
@@ -82,8 +95,17 @@ killthreads(void)
 	lock(&pidlk);
 	for(i = 0; i < Nthreads; i++)
 		if(pids[i] != 0 && pids[i] != me)
-			postnote(PNPROC, pids[i], "kill");
+			postnote(PNPROC, pids[i], Kinnote);
+	if(mainpid != me)
+		postnote(PNPROC, mainpid, Kinnote);
 	unlock(&pidlk);
+}
+
+/* end one of them */
+void
+p9stopproc(int pid)
+{
+	postnote(PNPROC, pid, Kinnote);
 }
 
 /* more than Nthreads at once: the rest are not stopped at exit */
@@ -160,6 +182,8 @@ p9runmain(void (*f)(void*), void *arg)
 	uchar *stk;
 	int pid;
 
+	mainpid = getpid();
+	noteinit();		/* before any fork: every process has the handler */
 	slot = (Thread**)privalloc();
 	forkreq = (Fork**)privalloc();
 	if(slot == nil || forkreq == nil)
@@ -179,12 +203,15 @@ p9runmain(void (*f)(void*), void *arg)
 			if(setjmp(l.back) == 0)
 				onstack(stk, Procstack, launched, &l);
 			free(stk);
+			droppid(getpid());
 			_exits(nil);
 		}
+		if(pid > 0)
+			addpid(pid);	/* here, before it can run long */
 		r->pid = pid;
 		longjmp(r->ret, 1);
 	}
-	atexit(killthreads);
+	atexit(p9killkin);
 	stk = malloc(Mainstack);
 	if(stk == nil)
 		sysfatal("no stack for main");
@@ -222,9 +249,7 @@ threadstart(void *a)
 	s = *(Tstart*)a;
 	free(a);
 	*slot = s.t;
-	addpid(getpid());
 	s.fn(s.t);
-	droppid(getpid());
 }
 
 int

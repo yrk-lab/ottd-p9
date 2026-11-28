@@ -6,20 +6,8 @@
 #include <libc.h>
 #include "net.h"
 
-static int	pids[Maxfd];	/* helpers, by socket descriptor */
-
-/* at exit, stop the helpers, which would outlive the program */
-static void
-stopall(void)
-{
-	int i;
-
-	for(i = 0; i < Maxfd; i++)
-		if(pids[i] > 0)
-			postnote(PNPROC, pids[i], "kill");
-}
-
-int	p9proc(void (*)(void*), void*);	/* thread9f.c */
+int	p9proc(void (*)(void*), void*);	/* thread9f.c: stopped with the program */
+void	p9stopproc(int);
 void	tsetname(char*);
 
 static void
@@ -36,13 +24,8 @@ sockrun(void *a)
 int
 starthelper(Sock *s, void (*run)(Sock*))
 {
-	static int once;
 	int pid;
 
-	if(!once){
-		atexit(stopall);
-		once = 1;
-	}
 	s->run = run;
 	s->refs++;
 	pid = p9proc(sockrun, s);
@@ -52,14 +35,13 @@ starthelper(Sock *s, void (*run)(Sock*))
 	}
 	s->helperid = pid;
 	s->helper = 1;
-	pids[s->fd] = pid;
 	return 0;
 }
 
 /*
  * A reader ends on the close and drops its reference: "close" is
  * TCP's graceful close (FIN, as close(2) does), which also ends the
- * reader's read.  Others are killed and keep theirs: the socket stays
+ * reader's read.  Others are stopped and keep theirs: the socket stays
  * allocated, as the helper may run a moment longer.
  */
 void
@@ -68,8 +50,7 @@ stophelper(Sock *s)
 	if(s->state == Sconnected)
 		write(s->fd, "close", 5);
 	else
-		postnote(PNPROC, s->helperid, "kill");
-	pids[s->fd] = 0;
+		p9stopproc(s->helperid);
 }
 
 /* the directory is the conversation's: it does not change with the descriptor */

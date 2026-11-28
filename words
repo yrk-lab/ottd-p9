@@ -598,3 +598,13 @@ Next steps now (replace section 10's first two items):
   -v null starts NO threads on Linux either (the "18 threads" was another scenario). 9front scripts in VM: no
   printf command; quote words with '=' (null:ticks=...); vmsh's namespace lacks build.rc's binds (bind
   build-p9/{lang,...} onto obj.9front/ for a manual run).
+- HELPERS END WITH THE PROGRAM (#21, 2026-11-28): root cause: build.rc's `echo interrupt` writes "interrupt\n"; sig9f
+  strcmp'd "interrupt" -> no match -> default -> main killed by the note (rc wait status "6.openttd N: interrupt";
+  build.rc's "quit on interrupt" only checked the pid was gone). Fix: sig9f noteis() allows a trailing \n; SIGPIPE
+  for "sys: write on closed pipe"; unhandled notes -> p9killkin() first. thread9f: every p9proc pid in the list
+  (addpid in the parent at fork, droppid in the child at its end), Kinnote "die openttd kin" (quiet death),
+  p9killkin (c_exit, os_p9 _exit, atexit in main), p9stopproc (net9f stophelper; net9f's own pids/stopall gone),
+  noteinit() in p9runmain before any fork (libthread main: notify(_threadnote)). Pattern from user: rd's
+  atexitkiller, vncv's "die vnc kin", rio/libthread threadexitsall. Not atexit per process: onex[] (NEXIT 33)
+  is shared under RFMEM. build.rc stop: echo -n, wait status, "left behind: N"; run9front.sh "== stops" fails on
+  them. Checked in VM: server quits on "interrupt\n" (status ''), nothing left; "kill" to main only -> helpers go.
