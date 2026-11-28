@@ -22,7 +22,6 @@ install:V:
 		mkdir -p $lib/$d
 		dircp $d $lib/$d
 	}
-	echo installed $BIN/openttd, data in $lib
 
 uninstall:V:
 	if(~ $BIN $home/bin/$cputype)
@@ -32,4 +31,3 @@ uninstall:V:
 	rm -f $BIN/openttd
 	for(d in $DATA)
 		rm -rf $lib/$d
-	echo removed $BIN/openttd and the data in $lib
