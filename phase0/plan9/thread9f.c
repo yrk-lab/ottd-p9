@@ -15,8 +15,9 @@
  * on a shared stack would leave two processes on it), the point
  * p9runmain keeps for that.
  *
- * Semaphores are the kernel's (semacquire), atomics atomic(2).  errno
- * is each thread's.
+ * Semaphores are the kernel's (semacquire); the atomics are
+ * atom_p9.c's, on the system's (atom9f.c, atom9l.c).  errno is each
+ * thread's.
  *
  * The program's processes end together, as libthread's (threadexitsall)
  * and rd's and vncv's do: every process forked here is listed, and
@@ -298,18 +299,6 @@ semdown(int *s, vlong ms)
 	}
 }
 
-int
-tcas(int *p, int old, int new)
-{
-	return acasl((Along*)p, old, new);
-}
-
-int
-tadd(int *p, int v)
-{
-	return aincl((Along*)p, v);
-}
-
 void
 tyield(void)
 {
@@ -320,166 +309,6 @@ vlong
 tnow(int)
 {
 	return nsec();
-}
-
-/*
- * __atomic_* library calls, as cbe makes them of atomic instructions,
- * on atomic(2), which is sequentially consistent: the memory orders
- * (the last arguments) are all served by it.  Aligned loads are
- * atomic on amd64.  A byte is changed by a compare and swap of the
- * aligned word around it.
- */
-
-uint
-__atomic_fetch_add_4(uint *p, uint v, int)
-{
-	return aincl((Along*)p, v) - v;
-}
-
-uint
-__atomic_fetch_sub_4(uint *p, uint v, int)
-{
-	return aincl((Along*)p, -v) + v;
-}
-
-uvlong
-__atomic_fetch_add_8(uvlong *p, uvlong v, int)
-{
-	return aincv((Avlong*)p, v) - v;
-}
-
-uvlong
-__atomic_fetch_sub_8(uvlong *p, uvlong v, int)
-{
-	return aincv((Avlong*)p, -v) + v;
-}
-
-uchar
-__atomic_load_1(uchar *p, int)
-{
-	return *(volatile uchar*)p;
-}
-
-uint
-__atomic_load_4(uint *p, int)
-{
-	return agetl((Along*)p);
-}
-
-uvlong
-__atomic_load_8(uvlong *p, int)
-{
-	return agetv((Avlong*)p);
-}
-
-void
-__atomic_store_4(uint *p, uint v, int)
-{
-	aswapl((Along*)p, v);
-}
-
-void
-__atomic_store_8(uvlong *p, uvlong v, int)
-{
-	aswapv((Avlong*)p, v);
-}
-
-uint
-__atomic_exchange_4(uint *p, uint v, int)
-{
-	return aswapl((Along*)p, v);
-}
-
-uvlong
-__atomic_exchange_8(uvlong *p, uvlong v, int)
-{
-	return aswapv((Avlong*)p, v);
-}
-
-int
-__atomic_compare_exchange_4(uint *p, uint *expected, uint desired, int, int)
-{
-	uint v;
-
-	for(;;){
-		if(acasl((Along*)p, *expected, desired))
-			return 1;
-		v = agetl((Along*)p);
-		if(v != *expected){
-			*expected = v;
-			return 0;
-		}
-	}
-}
-
-int
-__atomic_compare_exchange_8(uvlong *p, uvlong *expected, uvlong desired, int, int)
-{
-	uvlong v;
-
-	for(;;){
-		if(acasv((Avlong*)p, *expected, desired))
-			return 1;
-		v = agetv((Avlong*)p);
-		if(v != *expected){
-			*expected = v;
-			return 0;
-		}
-	}
-}
-
-/* op (0 store, 1 and, 2 or) v into the byte at p; the old byte */
-static uchar
-byteop(uchar *p, uchar v, int op)
-{
-	Along *w;
-	int shift;
-	ulong o, n;
-	uchar b, nb;
-
-	w = (Along*)((uintptr)p & ~3);
-	shift = ((uintptr)p & 3) * 8;
-	do{
-		o = agetl(w);
-		b = o >> shift;
-		switch(op){
-		default:
-			nb = v;
-			break;
-		case 1:
-			nb = b & v;
-			break;
-		case 2:
-			nb = b | v;
-			break;
-		}
-		n = (o & ~(0xFF << shift)) | (ulong)nb << shift;
-	}while(!acasl(w, o, n));
-	return b;
-}
-
-uchar
-__atomic_exchange_1(uchar *p, uchar v, int)
-{
-	return byteop(p, v, 0);
-}
-
-uchar
-__atomic_fetch_and_1(uchar *p, uchar v, int)
-{
-	return byteop(p, v, 1);
-}
-
-uchar
-__atomic_fetch_or_1(uchar *p, uchar v, int)
-{
-	return byteop(p, v, 2);
-}
-
-void
-__atomic_store_1(uchar *p, uchar v, int)
-{
-	byteop(p, v, 0);
 }
 
 /*

@@ -1,0 +1,66 @@
+#!/bin/rc
+# build9l.rc - build the translated OpenTTD on 9legacy and run it
+#	Run by run9legacy.sh (script=phase5/build9l.rc), with this
+#	repository on /n/ottd, as ../phase2/build.rc on 9front:
+#	FreeType by its own mkfile with 9legacy's 6c (objects and library
+#	named by O=6l, beside 9front's), then work/tu with mk SYS=9legacy
+#	(objects in work/tu/obj.9legacy), then openttd -h and the gate's
+#	world scenario for $ticks ticks (default 100), its save in
+#	../phase5/work/9l/world.sav.  Output: what each step says.
+rfork en
+r=/n/ottd
+tu=$r/phase2/work/tu
+o=$tu/obj.9legacy
+out=$r/phase5/work/9l
+data=$r/phase1/work
+if(~ $#ticks 0)
+	ticks=100
+mkdir -p $out
+date
+
+ft=$data/freetype
+if(! @{cd $ft && mk O=6l >$out/ft.log >[2=1]}){
+	echo freetype mk FAILED
+	grep -v '^warning' $out/ft.log | tail -20 | cut -c1-300
+	exit freetype
+}
+echo freetype: built
+
+cd $tu
+if(! mk 'SYS=9legacy' >$out/mk.log >[2=1]){
+	echo mk FAILED
+	grep -v '^warning' $out/mk.log | tail -30 | cut -c1-300
+	exit mk
+}
+echo mk: `{grep -c '^6[cl] ' $out/mk.log} commands
+date
+
+# the data OpenTTD finds next to its executable
+for(d in lang ai game baseset media bin){
+	mkdir -p $o/$d
+	bind $data/build-p9/$d $o/$d
+}
+$o/6.openttd -h >$out/h.txt >[2=1]
+echo openttd -h status $status
+sed 1q $out/h.txt
+
+# the gate's world scenario, as build.rc plays it
+d=/tmp/world
+mkdir -p $d/lib/openttd/baseset
+bind $data/data/openttd/baseset $d/lib/openttd/baseset
+{
+	echo '[misc]'
+	echo 'savegame_format = none'
+	echo 'prefer_sprite_font = true'
+	echo '[gui]'
+	echo 'autosave = off'
+	echo 'autosave_on_exit = true'
+	echo '[game_creation]'
+	echo 'town_name = english'
+	echo '[ai_players]'
+	echo 'none ='
+} >$d/openttd.cfg
+home=$d $o/6.openttd -x -c $d/openttd.cfg -v 'null:ticks='^$ticks -s null -m null -G 1234567 -g >$out/world.log >[2=1]
+echo world status $status
+cp $d/save/autosave/exit.sav $out/world.sav >[2]/dev/null && echo world: saved
+date
