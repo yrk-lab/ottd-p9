@@ -199,7 +199,10 @@ if(~ $gui 1){
 		echo 'autosave = off'
 		echo 'autosave_on_exit = true'
 	} >$d/openttd.cfg
-	home=$d $o/6.openttd -x -c $d/openttd.cfg -v plan9 -s null -m null -d 'driver=3' >$d/log >[2=1] &
+	# the draw shim says when its window is up (p9drawshot: /tmp/shot.ready;
+	# no shots of its own): then the host's input begins (gui/shot.ready)
+	rm -f /tmp/shot.ready
+	home=$d p9drawshot=/tmp/shot p9drawshotat=100000 $o/6.openttd -x -c $d/openttd.cfg -v plan9 -s null -m null -d 'driver=3' >$d/log >[2=1] &
 	pid=()
 	i=0
 	while(~ $#pid 0 && test $i -lt 60){
@@ -207,6 +210,9 @@ if(~ $gui 1){
 		pid=`{ps | grep ' 6\.openttd$' | awk '{print $2}' | sed 1q}
 		i=`{echo $i + 1 | hoc}
 	}
+	while(! test -f /tmp/shot.ready && test -e /proc/$pid)
+		sleep 1
+	touch $d/shot.ready
 	start=`{date -n}
 	for(t in $guishots){
 		while(test `{date -n} -lt `{echo $start + $t | hoc})

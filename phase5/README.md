@@ -15,6 +15,7 @@ after it), starts vmsh's listener, runs `$script` and reboots, which ends QEMU; 
 
 	script=phase5/build9l.rc ticks=100000 ./run9legacy.sh
 	script=phase5/build9l.rc gui=1 guishots="30 50" ./run9legacy.sh
+	script=phase5/build9l.rc gui=1 guitime=70 guishots="20 30 45 58 64" guiinput=../phase3/newgame9f.input ./run9legacy.sh
 
 `build9l.rc` builds FreeType (a tree of its own, `../phase1/work/freetype9l`: 9front's objects are another
 compiler's) and the translated game (`mk SYS=9legacy` in `../phase2/work/tu`, objects in `obj.9legacy`) with
@@ -51,3 +52,7 @@ takes screenshots (`work/9l/screen.t.png`). run9legacy.sh compares the saves wit
   left nothing behind.
 - The GUI on the bare screen: the title screen and its game (`screens/9legacy-title.png`), the game loop in its
   own thread.
+- Input, through QEMU's monitor as for 9front (`guiinput=../phase3/newgame9f.input`, the same positions): the
+  survey dismissed, New Game, Generate, the console with the backquote and "help" typed into it
+  (`screens/9legacy-input-timeline.png`: 20, 30, 45, 58, 64 s). The held arrow does not scroll: 4e has no key-up
+  events.

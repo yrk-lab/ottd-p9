@@ -61,8 +61,66 @@ $wrap timeout ${timeout:-600} qemu-system-x86_64 $accel -m 4G -smp 2 -no-reboot 
 	-device virtio-9p-pci,disable-legacy=on,fsdev=repo,mount_tag=ottd \
 	-netdev user,id=net0,hostfwd=tcp:127.0.0.1:13979-:3979,hostfwd=udp:127.0.0.1:13979-:3979,hostfwd=tcp:127.0.0.1:17019-:17019 \
 	-device virtio-net-pci,netdev=net0 \
+	-monitor "unix:$w/qemu.mon,server=on,wait=off" \
 	-display none -serial file:"$w/console.log" &
 qemu=$!
+
+# input for the GUI (guiinput=script), through QEMU's monitor, as
+# run9front.sh sends it: "seconds command" lines from when the window
+# is up (build9l.rc's gui/shot.ready); "at x y" moves the mouse there
+# (PS/2 is relative: to the corner, then in steps), "click" clicks,
+# anything else is a monitor command (sendkey right)
+mon()
+{
+	echo "$*" | socat - "UNIX-CONNECT:$w/qemu.mon" >/dev/null 2>&1
+}
+move()
+{
+	local dx=$1 dy=$2 sx sy
+	while [ $dx -ne 0 ] || [ $dy -ne 0 ]; do
+		sx=$(( dx > 10 ? 10 : (dx < -10 ? -10 : dx) ))
+		sy=$(( dy > 10 ? 10 : (dy < -10 ? -10 : dy) ))
+		mon mouse_move $sx $sy
+		dx=$((dx - sx))
+		dy=$((dy - sy))
+	done
+}
+play()
+{
+	local start now t cmd
+	while kill -0 $qemu 2>/dev/null && [ ! -f "$w/9l/gui/shot.ready" ]; do
+		sleep 1
+	done
+	start=$(date +%s.%N)
+	while read -r t cmd; do
+		case $t in ''|'#'*) continue ;; esac
+		now=$(date +%s.%N)
+		sleep "$(echo "$start + $t - $now" | bc | sed 's/^-.*/0/')"
+		echo "$t: $cmd"
+		set -- $cmd
+		case $1 in
+		at)
+			move -2000 -2000
+			move $2 $3
+			;;
+		click)
+			mon mouse_button 1
+			sleep 0.2
+			mon mouse_button 0
+			;;
+		*)
+			mon "$cmd"
+			;;
+		esac
+	done <"$guiinput"
+}
+rm -f "$w/9l/gui/shot.ready"
+player=
+if [ -n "${guiinput:-}" ]; then
+	guiinput=$(realpath "$guiinput")
+	play >"$w/input.log" 2>&1 &
+	player=$!
+fi
 # a dedicated server (build9l.rc says when it is up, in work/9l/ded):
 # the stock Linux build joins it through the port forward for
 # $clienttime seconds, as run9front.sh's client does
@@ -86,6 +144,7 @@ if [ -f "$w/9l/ded/ready" ]; then
 	touch "$w/9l/ded/done"
 fi
 wait $qemu || true
+[ -z "$player" ] || kill $player 2>/dev/null
 [ -f "$w/out.txt" ] || { echo "run9legacy: no output; console in $w/console.log" >&2; tail -20 "$w/console.log" >&2; exit 1; }
 cat "$w/out.txt"
 # build9l.rc's gate saves, normalized, against the reference build's
